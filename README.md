@@ -1,3 +1,5 @@
+![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)
+
 # field-matrix-utils
 
 Simple matrix library for Rust.
