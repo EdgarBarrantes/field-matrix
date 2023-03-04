@@ -162,8 +162,7 @@ impl<F: Field> Mul<Matrix<F>> for Matrix<F> {
         for i in 0..self.matrix.len() {
             for j in 0..other.matrix.first().unwrap().len() {
                 for k in 0..self.matrix.first().unwrap().len() {
-                    result.matrix[i][j] =
-                        result.matrix[i][j] + self.matrix[i][k] * other.matrix[k][j];
+                    result.matrix[i][j] += self.matrix[i][k] * other.matrix[k][j];
                 }
             }
         }
@@ -237,7 +236,7 @@ impl<F: Field> Matrix<F> {
                 return F::ZERO;
             }
 
-            det = det * pivot;
+            det *= pivot;
 
             for j in (i + 1)..n {
                 let factor = self.matrix[j][i] / pivot;
@@ -342,7 +341,7 @@ impl<F: Field> Matrix<F> {
             for j in 0..n {
                 let mut sum = F::ZERO;
                 for k in 0..j {
-                    sum = sum + l[j][k] * y[k];
+                    sum += l[j][k] * y[k];
                 }
                 y[j] = b[j] - sum;
             }
@@ -351,7 +350,7 @@ impl<F: Field> Matrix<F> {
             for j in (0..n).rev() {
                 let mut sum = F::ZERO;
                 for k in j + 1..n {
-                    sum = sum + u[j][k] * x[k][i];
+                    sum += u[j][k] * x[k][i];
                 }
                 x[j][i] = (y[j] - sum) / u[j][j];
             }
@@ -380,7 +379,8 @@ impl<F: Field> Matrix<F> {
             for j in 0..num_columns {
                 if i == j && self.matrix[i][j] != F::ONE {
                     return false;
-                } else if i != j && self.matrix[i][j] != F::ZERO {
+                }
+                if i != j && self.matrix[i][j] != F::ZERO {
                     return false;
                 }
             }
@@ -458,7 +458,7 @@ impl<F: Field> Matrix<F> {
             for j in 0..num_columns {
                 let mut sum = F::ZERO;
                 for k in 0..i {
-                    sum = sum + l[i][k] * u[k][j];
+                    sum += l[i][k] * u[k][j];
                 }
                 u[i][j] = self.matrix[i][j] - sum;
             }
@@ -466,7 +466,7 @@ impl<F: Field> Matrix<F> {
             for j in 0..num_columns {
                 let mut sum = F::ZERO;
                 for k in 0..i {
-                    sum = sum + l[j][k] * u[k][i];
+                    sum += l[j][k] * u[k][i];
                 }
                 l[j][i] = (self.matrix[j][i] - sum) / u[i][i];
             }
@@ -539,7 +539,7 @@ impl<F: Field> Matrix<F> {
 
         for i in 0..num_rows {
             for j in 0..num_columns {
-                sum = sum + self.matrix[i][j];
+                sum += self.matrix[i][j];
             }
         }
 
@@ -886,7 +886,7 @@ mod tests {
         ]);
 
         let c = a.clone() * (b.clone());
-        let d = b.clone() * (a.clone());
+        let d = b * (a.clone());
 
         assert_eq!(
             c,
