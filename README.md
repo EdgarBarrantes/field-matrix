@@ -1,4 +1,5 @@
 ![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)
+![Tests](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml/badge.svg)
 
 # field-matrix-utils
 
@@ -9,6 +10,7 @@ Not safe for production use.
 It was only done for educational purposes.
 
 ## Example
+
 ```rust
 // Arkworks has a macro to generate the modulus and generator for a finite field.
 // Type F is field element for use in our matrix.
@@ -31,7 +33,9 @@ let d: Matrix<F> = a * b;
 let det: F = a.determinant();
 ...
 ```
+
 ## Features:
+
 - Addition
 - Subtraction
 - Multiplication
@@ -50,4 +54,3 @@ let det: F = a.determinant();
 - Equality
 - Display
 - Linear equations Ax = b for x solution
-
