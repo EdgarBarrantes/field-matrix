@@ -2,8 +2,13 @@
 name = "field-matrix-utils"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Edgar Barrantes <edgar@barrantes.dev>"]
+description = "A library for working with matrices over finite fields"
+repository = "https://github.com/edgarbarrantes/field-matrix"
+readme = "README.md"
+keywords = ["algebra", "matrix", "field", "finite-fields", "arkworks"]
+categories = ["algorithms", "data-structures", "mathematics"]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 ark-ff = "0.4.1"
