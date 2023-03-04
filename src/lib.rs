@@ -187,7 +187,7 @@ impl<F: Field> Matrix<F> {
     /// Returns whether or not the matrix is square.
     /// ## Example
     /// ```
-    /// let is_square: bool = a.is_square());
+    /// let is_square: bool = a.is_square();
     /// assert!(is_square);
     /// ```
     pub fn is_square(self) -> bool {
