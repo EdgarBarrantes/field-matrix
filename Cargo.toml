@@ -9,4 +9,5 @@ edition = "2021"
 ark-ff = "0.4.1"
 
 [lib]
+path = "src/lib.rs"
 doctest = false
