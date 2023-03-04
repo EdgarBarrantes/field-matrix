@@ -1,4 +1,4 @@
-![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)
+[![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)](https://crates.io/crates/field-matrix-utils)
 ![Tests](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml/badge.svg)
 
 # field-matrix-utils
