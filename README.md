@@ -1,7 +1,7 @@
+# field-matrix-utils
+
 [![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)](https://crates.io/crates/field-matrix-utils)
 ![Tests](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml/badge.svg)
-
-# field-matrix-utils
 
 Simple matrix library for Rust.
 Used for use with Finite fields.
@@ -54,3 +54,5 @@ let det: F = a.determinant();
 - Equality
 - Display
 - Linear equations Ax = b for x solution
+
+License: MIT OR Apache-2.0
