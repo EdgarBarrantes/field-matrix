@@ -1,7 +1,8 @@
 use core::ops::{Add, Sub};
 use std::fmt;
 
-use crate::matrix::Matrix;
+use crate::vector::Vector;
+use ark_ff::Field;
 
 #[derive(Debug, Clone)]
 pub struct VectorOfVectors<F: Field> {
@@ -130,6 +131,7 @@ impl<F: Field> VectorOfVectors<F> {
 
     pub fn evualuate(&self, alpha: F) -> Vector<F> {
         let mut result = self.get(0).to_owned();
+        // Is there a powers function that I am not finding in the repo?
         let powers = alpha.powers();
         for (v, alpha_i) in self.iter().zip(powers).skip(1) {
             result = result + v.to_owned().scalar_mul(alpha_i);

@@ -1,7 +1,7 @@
 use core::ops::{Add, Sub};
 use std::fmt;
 
-use crate::matrix::Matrix;
+use ark_ff::Field;
 
 #[derive(Debug, Clone)]
 pub struct Vector<F: Field> {

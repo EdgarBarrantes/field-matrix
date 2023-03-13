@@ -2,6 +2,10 @@ use core::ops::{Add, Sub};
 use std::fmt;
 
 use crate::matrix::Matrix;
+use crate::vector::Vector;
+use crate::vector_of_vectors::VectorOfVectors;
+
+use ark_ff::Field;
 
 #[derive(Debug, Clone)]
 pub struct MatrixVector<F: Field> {

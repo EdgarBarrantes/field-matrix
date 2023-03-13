@@ -8,7 +8,7 @@ pub struct Matrix<F: Field> {
     pub matrix: Vec<Vec<F>>,
 }
 
-impl<F> fmt::Display for Matrix<F> {
+impl<F: Field> fmt::Display for Matrix<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s = String::new();
         for row in self.matrix.iter() {
@@ -21,7 +21,7 @@ impl<F> fmt::Display for Matrix<F> {
     }
 }
 
-impl<F> PartialEq for Matrix<F> {
+impl<F: Field> PartialEq for Matrix<F> {
     fn eq(&self, other: &Matrix<F>) -> bool {
         let num_rows = self.matrix.len();
         let num_columns = self.matrix.first().unwrap().len();
@@ -40,7 +40,7 @@ impl<F> PartialEq for Matrix<F> {
     }
 }
 
-impl<F> Add<Matrix<F>> for Matrix<F> {
+impl<F: Field> Add<Matrix<F>> for Matrix<F> {
     type Output = Matrix<F>;
 
     fn add(self, other: Matrix<F>) -> Matrix<F> {
@@ -67,7 +67,7 @@ impl<F> Add<Matrix<F>> for Matrix<F> {
     }
 }
 
-impl<F> Sub<Matrix<F>> for Matrix<F> {
+impl<F: Field> Sub<Matrix<F>> for Matrix<F> {
     type Output = Matrix<F>;
 
     fn sub(self, other: Matrix<F>) -> Matrix<F> {
@@ -94,7 +94,7 @@ impl<F> Sub<Matrix<F>> for Matrix<F> {
     }
 }
 
-impl<F> Mul<Matrix<F>> for Matrix<F> {
+impl<F: Field> Mul<Matrix<F>> for Matrix<F> {
     type Output = Matrix<F>;
 
     fn mul(self, rhs: Matrix<F>) -> Matrix<F> {
@@ -122,7 +122,7 @@ impl<F> Mul<Matrix<F>> for Matrix<F> {
     }
 }
 
-impl<F> Matrix<F> {
+impl<F: Field> Matrix<F> {
     /// Creates a new matrix from a vector of vectors.
     /// ## Example
     /// ```
