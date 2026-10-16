@@ -9,6 +9,11 @@ Used for use with Finite fields.
 Not safe for production use.
 It was only done for educational purposes.
 
+**Upgrade from 0.1.1 or earlier:** those versions gave wrong results. `ax_b_solve_for_x` returned
+wrong solutions, `mul_vec` computed v * A instead of A * v, and `adjoint` returned the transpose.
+They also panicked on valid input: invertible matrices that need row exchanges, non-square
+matrices in `scalar_mul` and `==`, and empty matrices. See [CHANGELOG.md](CHANGELOG.md).
+
 ## Example
 
 ```rust

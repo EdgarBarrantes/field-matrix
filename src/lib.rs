@@ -4,6 +4,11 @@
 //! Not safe for production use.
 //! It was only done for educational purposes.
 //!
+//! **Upgrade from 0.1.1 or earlier:** those versions gave wrong results. `ax_b_solve_for_x` returned
+//! wrong solutions, `mul_vec` computed v * A instead of A * v, and `adjoint` returned the transpose.
+//! They also panicked on valid input: invertible matrices that need row exchanges, non-square
+//! matrices in `scalar_mul` and `==`, and empty matrices. See [CHANGELOG.md](CHANGELOG.md).
+//!
 //! # Example
 //! ```
 //! // Arkworks has a macro to generate the modulus and generator for a finite field.
@@ -73,20 +78,7 @@ impl<F: Field> fmt::Display for Matrix<F> {
 
 impl<F: Field> PartialEq for Matrix<F> {
     fn eq(&self, other: &Matrix<F>) -> bool {
-        let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
-
-        assert_eq!(num_rows, num_columns, "Matrix is not square");
-
-        for i in 0..num_rows {
-            for j in 0..num_columns {
-                if self.matrix[i][j] != other.matrix[i][j] {
-                    return false;
-                }
-            }
-        }
-
-        true
+        self.matrix == other.matrix
     }
 }
 
@@ -100,15 +92,15 @@ impl<F: Field> Add<Matrix<F>> for Matrix<F> {
             "Matrices have different number of rows"
         );
         assert_eq!(
-            self.matrix.first().unwrap().len(),
-            other.matrix.first().unwrap().len(),
+            self.num_columns(),
+            other.num_columns(),
             "Matrices have different number of columns"
         );
 
         let mut result = self.clone();
 
         for i in 0..self.matrix.len() {
-            for j in 0..self.matrix.first().unwrap().len() {
+            for j in 0..self.num_columns() {
                 result.matrix[i][j] = self.matrix[i][j] + other.matrix[i][j];
             }
         }
@@ -127,15 +119,15 @@ impl<F: Field> Sub<Matrix<F>> for Matrix<F> {
             "Matrices have different number of rows"
         );
         assert_eq!(
-            self.matrix.first().unwrap().len(),
-            other.matrix.first().unwrap().len(),
+            self.num_columns(),
+            other.num_columns(),
             "Matrices have different number of columns"
         );
 
         let mut result = self.clone();
 
         for i in 0..self.matrix.len() {
-            for j in 0..self.matrix.first().unwrap().len() {
+            for j in 0..self.num_columns() {
                 result.matrix[i][j] = self.matrix[i][j] - other.matrix[i][j];
             }
         }
@@ -149,19 +141,16 @@ impl<F: Field> Mul<Matrix<F>> for Matrix<F> {
 
     fn mul(self, other: Matrix<F>) -> Matrix<F> {
         assert_eq!(
-            self.matrix.first().unwrap().len(),
+            self.num_columns(),
             other.matrix.len(),
             "Matrices cannot be multiplied"
         );
 
-        let mut result = Matrix::new(vec![
-            vec![F::ZERO; other.matrix.first().unwrap().len()];
-            self.matrix.len()
-        ]);
+        let mut result = Matrix::new(vec![vec![F::ZERO; other.num_columns()]; self.matrix.len()]);
 
         for i in 0..self.matrix.len() {
-            for j in 0..other.matrix.first().unwrap().len() {
-                for k in 0..self.matrix.first().unwrap().len() {
+            for j in 0..other.num_columns() {
+                for k in 0..self.num_columns() {
                     result.matrix[i][j] += self.matrix[i][k] * other.matrix[k][j];
                 }
             }
@@ -180,8 +169,67 @@ impl<F: Field> Matrix<F> {
     ///     vec![F::from(3), F::from(4)],
     /// ]);
     /// ```
+    /// ## Panics
+    /// Panics if the rows don't all have the same length.
     pub fn new(matrix: Vec<Vec<F>>) -> Matrix<F> {
+        if let Some(first) = matrix.first() {
+            assert!(
+                matrix.iter().all(|row| row.len() == first.len()),
+                "Rows have different lengths"
+            );
+        }
         Matrix { matrix }
+    }
+
+    fn num_columns(&self) -> usize {
+        self.matrix.first().map_or(0, |row| row.len())
+    }
+
+    fn identity(n: usize) -> Matrix<F> {
+        let mut matrix = vec![vec![F::ZERO; n]; n];
+        for (i, row) in matrix.iter_mut().enumerate() {
+            row[i] = F::ONE;
+        }
+        Matrix { matrix }
+    }
+
+    /// Gauss-Jordan elimination with row exchanges on [self | rhs].
+    /// Returns the solution columns, or None if self is singular.
+    fn gauss_jordan(&self, rhs: Vec<Vec<F>>) -> Option<Vec<Vec<F>>> {
+        let n = self.matrix.len();
+        assert_eq!(n, self.num_columns(), "Matrix is not square");
+        let mut a = self.matrix.clone();
+        let mut b = rhs;
+
+        for i in 0..n {
+            let pivot_row = (i..n).find(|&r| a[r][i] != F::ZERO)?;
+            a.swap(i, pivot_row);
+            b.swap(i, pivot_row);
+
+            let pivot_inverse = a[i][i].inverse()?;
+            for k in 0..n {
+                a[i][k] *= pivot_inverse;
+            }
+            for value in b[i].iter_mut() {
+                *value *= pivot_inverse;
+            }
+
+            for r in 0..n {
+                if r != i && a[r][i] != F::ZERO {
+                    let factor = a[r][i];
+                    for k in 0..n {
+                        let value = a[i][k];
+                        a[r][k] -= factor * value;
+                    }
+                    for k in 0..b[r].len() {
+                        let value = b[i][k];
+                        b[r][k] -= factor * value;
+                    }
+                }
+            }
+        }
+
+        Some(b)
     }
 
     /// Returns whether or not the matrix is square.
@@ -192,7 +240,7 @@ impl<F: Field> Matrix<F> {
     /// ```
     pub fn is_square(self) -> bool {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         if num_rows == 0 {
             return false;
@@ -257,7 +305,7 @@ impl<F: Field> Matrix<F> {
     /// ```
     pub fn is_diagonal(self) -> bool {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         if num_rows == 0 {
             return false;
@@ -281,7 +329,7 @@ impl<F: Field> Matrix<F> {
     /// ```
     pub fn transpose(self) -> Matrix<F> {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         let mut new_rows = vec![vec![F::ZERO; num_rows]; num_columns];
 
@@ -294,69 +342,67 @@ impl<F: Field> Matrix<F> {
         Matrix { matrix: new_rows }
     }
 
-    /// Returns the adjoint of the matrix.
+    /// Returns the adjoint (adjugate) of the matrix: the transpose of its cofactor matrix,
+    /// so that `a * a.adjoint() == det(a) * I`, also when `a` is singular.
     /// ## Example
     /// ```
     /// let b: Matrix<F> = a.adjoint();
     /// ```
+    /// ## Panics
+    /// Panics if the matrix is not square.
+    /// ## Notes
+    /// Versions up to 0.1.1 returned the transpose here.
     pub fn adjoint(self) -> Matrix<F> {
-        let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
-
-        let mut new_rows = vec![vec![F::ZERO; num_rows]; num_columns];
-
-        for i in 0..num_rows {
-            for j in 0..num_columns {
-                new_rows[j][i] = self.matrix[i][j];
-            }
+        let n = self.matrix.len();
+        assert_eq!(n, self.num_columns(), "Matrix is not square");
+        if n == 1 {
+            return Matrix::new(vec![vec![F::ONE]]);
         }
 
-        Matrix { matrix: new_rows }
-    }
-
-    /// Returns the inverse of the matrix.
-    /// ## Example
-    /// ```
-    /// let b: Matrix<F> = a.inverse();
-    /// ```
-    /// ## Panics
-    /// Panics if the matrix is not invertible.
-    /// ## Notes
-    /// This function uses the LU decomposition to compute the inverse.
-    /// The LU decomposition is computed using the Doolittle algorithm.
-    pub fn inverse(self) -> Option<Matrix<F>> {
-        let (l_prima, u_prima) = self.lu_decomposition();
-        let (l, u) = (l_prima.matrix, u_prima.matrix);
-
-        let n = self.matrix.len();
-        let mut x = vec![vec![F::ZERO; n]; n];
+        let mut adjugate = vec![vec![F::ZERO; n]; n];
 
         for i in 0..n {
-            let mut b = vec![F::ZERO; n];
-            b[i] = F::ONE;
-
-            let mut y = vec![F::ZERO; n];
-
-            // solve Ly = b for y
             for j in 0..n {
-                let mut sum = F::ZERO;
-                for k in 0..j {
-                    sum += l[j][k] * y[k];
-                }
-                y[j] = b[j] - sum;
-            }
-
-            // solve Ux = y for x
-            for j in (0..n).rev() {
-                let mut sum = F::ZERO;
-                for k in j + 1..n {
-                    sum += u[j][k] * x[k][i];
-                }
-                x[j][i] = (y[j] - sum) / u[j][j];
+                let minor: Vec<Vec<F>> = self
+                    .matrix
+                    .iter()
+                    .enumerate()
+                    .filter(|&(r, _)| r != i)
+                    .map(|(_, row)| {
+                        row.iter()
+                            .enumerate()
+                            .filter(|&(c, _)| c != j)
+                            .map(|(_, &value)| value)
+                            .collect()
+                    })
+                    .collect();
+                let cofactor = Matrix { matrix: minor }.determinant();
+                adjugate[j][i] = if (i + j) % 2 == 0 {
+                    cofactor
+                } else {
+                    -cofactor
+                };
             }
         }
 
-        Some(Matrix { matrix: x })
+        Matrix { matrix: adjugate }
+    }
+
+    /// Returns the inverse of the matrix, or None if it is not invertible.
+    /// ## Example
+    /// ```
+    /// let b: Matrix<F> = a.inverse().unwrap();
+    /// ```
+    /// ## Panics
+    /// Panics if the matrix is not square.
+    /// ## Notes
+    /// This function uses Gauss-Jordan elimination with row exchanges.
+    /// Versions up to 0.1.1 panicked instead of returning None, and also on invertible
+    /// matrices that need row exchanges, such as [[0, 1], [1, 0]].
+    pub fn inverse(self) -> Option<Matrix<F>> {
+        let n = self.matrix.len();
+        self.gauss_jordan(Matrix::identity(n).matrix)
+            .map(|matrix| Matrix { matrix })
     }
 
     /// Returns whether or not the matrix is the identity matrix.
@@ -369,7 +415,7 @@ impl<F: Field> Matrix<F> {
     /// This function returns false if the matrix is empty.
     pub fn is_identity(self) -> bool {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         if num_rows == 0 {
             return false;
@@ -392,39 +438,27 @@ impl<F: Field> Matrix<F> {
     /// Solves the system of linear equations Ax = b for x.
     /// ## Example
     /// ```
-    /// let x: Vec<F> = a.solve_for_x(b);
+    /// let x: Vec<F> = a.ax_b_solve_for_x(b);
     /// ```
     /// ## Panics
-    /// Panics if the matrix is the determinant of the matrix is zero.
+    /// Panics if the matrix is not square, if b has the wrong length, or if the determinant
+    /// of the matrix is zero.
     /// ## Notes
-    /// This function uses the LU decomposition to solve the system of linear equations.
-    /// The LU decomposition is computed using the Doolittle algorithm.
+    /// This function uses Gaussian elimination with row exchanges.
+    /// Versions up to 0.1.1 returned wrong solutions (a bug in back substitution) and
+    /// panicked on matrices that need row exchanges.
     pub fn ax_b_solve_for_x(self, b: Vec<F>) -> Vec<F> {
-        let (l, u) = self.lu_decomposition();
-        let n = l.matrix.len();
-
-        let mut y = vec![F::ZERO; n];
-        let mut x = vec![F::ZERO; n];
-
-        // Solve for Ly=b
-        for i in 0..n {
-            let mut sum = F::ZERO;
-            for j in 0..i {
-                sum += l.matrix[i][j] * y[j];
-            }
-            y[i] = b[i] - sum;
-        }
-
-        //Solve Ux = y
-        for i in (0..n).rev() {
-            let mut sum = F::ZERO;
-            for j in (i + 1)..n {
-                sum += u.matrix[i][j] * x[i];
-            }
-            x[i] = (y[i] - sum) / u.matrix[i][i];
-        }
-
-        x
+        assert_eq!(
+            b.len(),
+            self.matrix.len(),
+            "b must have one element per row"
+        );
+        let columns = b.into_iter().map(|value| vec![value]).collect();
+        self.gauss_jordan(columns)
+            .expect("Det(A) = 0")
+            .into_iter()
+            .map(|row| row[0])
+            .collect()
     }
 
     /// Returns the LU decomposition of the matrix.
@@ -433,15 +467,18 @@ impl<F: Field> Matrix<F> {
     /// let (l, u): (Matrix<F>, Matrix<F>) = a.lu_decomposition();
     /// ```
     /// ## Panics
-    /// Panics if the matrix is the determinant of the matrix is zero.
+    /// Panics if the matrix is not square, if its determinant is zero, or if it needs row
+    /// exchanges (a zero pivot, as in [[0, 1], [1, 0]]): this decomposition has no
+    /// permutation matrix.
     /// ## Notes
     /// This function uses the Doolittle algorithm to compute the LU decomposition.
     /// The Doolittle algorithm is a variant of the Gaussian elimination algorithm.
     pub fn lu_decomposition(&self) -> (Matrix<F>, Matrix<F>) {
         assert_ne!(self.clone().determinant(), F::ZERO, "Det(A) = 0");
+        assert!(self.clone().is_square(), "Matrix is not square");
 
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         let mut l = vec![vec![F::ZERO; num_rows]; num_columns];
         let mut u = vec![vec![F::ZERO; num_rows]; num_columns];
@@ -462,6 +499,12 @@ impl<F: Field> Matrix<F> {
                 }
                 u[i][j] = self.matrix[i][j] - sum;
             }
+
+            assert_ne!(
+                u[i][i],
+                F::ZERO,
+                "Matrix has no LU decomposition without row exchanges"
+            );
 
             for j in 0..num_columns {
                 let mut sum = F::ZERO;
@@ -484,9 +527,9 @@ impl<F: Field> Matrix<F> {
     /// This function is equivalent to multiplying each element of the matrix by the scalar.
     pub fn scalar_mul(self, scalar: F) -> Matrix<F> {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
-        let mut new_rows = vec![vec![F::ZERO; num_rows]; num_columns];
+        let mut new_rows = vec![vec![F::ZERO; num_columns]; num_rows];
 
         for i in 0..num_rows {
             for j in 0..num_columns {
@@ -503,21 +546,23 @@ impl<F: Field> Matrix<F> {
     /// let c: Vec<F> = a.mul_vec(b);
     /// ```
     /// ## Panics
-    /// Panics if the number of rows in the matrix is not equal to the number of elements in the vector.
+    /// Panics if the number of columns in the matrix is not equal to the number of elements in
+    /// the vector.
     /// ## Notes
-    /// This function is equivalent to multiplying the matrix by a column vector.
+    /// This function is equivalent to multiplying the matrix by a column vector: A * v.
+    /// Versions up to 0.1.1 computed v * A (the vector as a row) instead.
     pub fn mul_vec(self, vec: Vec<F>) -> Vec<F> {
         assert_eq!(
             vec.len(),
-            self.matrix.len(),
+            self.num_columns(),
             "Vector and matrix can't be multiplied by the other"
         );
 
-        let mut result = vec![F::ZERO; self.matrix.first().unwrap().len()];
+        let mut result = vec![F::ZERO; self.matrix.len()];
 
-        for i in 0..self.matrix.first().unwrap().len() {
-            for j in 0..self.matrix.len() {
-                result[i] += vec[j] * self.matrix[j][i];
+        for i in 0..self.matrix.len() {
+            for j in 0..self.num_columns() {
+                result[i] += self.matrix[i][j] * vec[j];
             }
         }
 
@@ -533,7 +578,7 @@ impl<F: Field> Matrix<F> {
     /// This function is equivalent to summing all the elements in the matrix.
     pub fn sum_of_matrix(self) -> F {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         let mut sum = F::ZERO;
 
@@ -564,20 +609,14 @@ impl<F: Field> Matrix<F> {
     /// The first element in the outer vector is row 0 and the first element in the inner vector is column 0.
     pub fn set_element(&mut self, row: usize, column: usize, new_value: F) {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         assert!(
             row < num_rows && column < num_columns,
             "Index out of bounds"
         );
 
-        for i in 0..num_rows {
-            for j in 0..num_columns {
-                if i == row && j == column {
-                    self.matrix[i][j] = new_value;
-                }
-            }
-        }
+        self.matrix[row][column] = new_value;
     }
 
     /// Gets a specific element in the matrix.
@@ -598,7 +637,7 @@ impl<F: Field> Matrix<F> {
     /// The first element in the outer vector is row 0 and the first element in the inner vector is column 0.
     pub fn get_element(&self, row: usize, column: usize) -> F {
         let num_rows = self.matrix.len();
-        let num_columns = self.matrix.first().unwrap().len();
+        let num_columns = self.num_columns();
 
         assert!(
             row < num_rows && column < num_columns,
@@ -717,8 +756,8 @@ mod tests {
         assert_eq!(
             b,
             Matrix::new(vec![
-                vec![F::from(2), F::from(4)],
-                vec![F::from(3), F::from(3)]
+                vec![F::from(3), -F::from(3)],
+                vec![-F::from(4), F::from(2)]
             ])
         );
     }
@@ -766,7 +805,6 @@ mod tests {
         assert!(!b.is_identity());
     }
 
-    // Double check this test.
     #[test]
     fn test_matrix_utils_ax_b_solve_for_x() {
         #[derive(ark_ff::MontConfig)]
@@ -782,7 +820,8 @@ mod tests {
 
         let x = a.ax_b_solve_for_x(b);
 
-        assert_eq!(x, vec![F::from(1), F::from(1) / F::from(2)]);
+        // x = 0, y = 1/2: 0 + 2 * 1/2 = 1 and 0 + 4 * 1/2 = 2
+        assert_eq!(x, vec![F::from(0), F::from(1) / F::from(2)]);
     }
 
     #[test]
@@ -928,7 +967,6 @@ mod tests {
         );
     }
 
-    // Double check this test.
     #[test]
     fn test_matrix_utils_multiply_vec() {
         #[derive(ark_ff::MontConfig)]
@@ -944,7 +982,8 @@ mod tests {
 
         let c = a.mul_vec(b);
 
-        assert_eq!(c, vec![F::from(7), F::from(10)]);
+        // [1 * 1 + 2 * 2, 3 * 1 + 4 * 2]
+        assert_eq!(c, vec![F::from(5), F::from(11)]);
     }
 
     #[test]
