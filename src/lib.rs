@@ -52,6 +52,3 @@
 //!
 
 pub mod matrix;
-pub mod vector;
-pub mod vector_of_matrices;
-pub mod vector_of_vectors;
