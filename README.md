@@ -1,61 +1,100 @@
-[![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)](https://crates.io/crates/field-matrix-utils)
-![Tests](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml/badge.svg)
-
 # field-matrix-utils
 
-Simple matrix library for Rust.
-Used for use with Finite fields.
+[![crates.io](https://img.shields.io/crates/v/field-matrix-utils.svg)](https://crates.io/crates/field-matrix-utils)
+[![docs.rs](https://img.shields.io/docsrs/field-matrix-utils)](https://docs.rs/field-matrix-utils)
+[![Tests](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml/badge.svg)](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/field-matrix-utils.svg)](#license)
 
-Not safe for production use.
-It was only done for educational purposes.
+Dense matrices over finite fields, for Rust: arithmetic, determinant, inverse, adjugate, LU
+decomposition and linear systems (Ax = b), with any [arkworks](https://arkworks.rs) field
+(`ark_ff::Field`, ark-ff 0.4) as the element type.
 
-**Upgrade from 0.1.1 or earlier:** those versions gave wrong results. `ax_b_solve_for_x` returned
-wrong solutions, `mul_vec` computed v * A instead of A * v, and `adjoint` returned the transpose.
-They also panicked on valid input: invertible matrices that need row exchanges, non-square
-matrices in `scalar_mul` and `==`, and empty matrices. See [CHANGELOG.md](CHANGELOG.md).
+Exact arithmetic modulo a prime has no rounding, so a matrix inverse or a solved system is
+exactly right or the matrix is singular. That is what you need for exercises in cryptography,
+coding theory and zero-knowledge proofs, where general-purpose matrix crates such as nalgebra
+don't fit: their inverse and LU need real or complex numbers.
+
+## Who it's for
+
+- Learning and prototyping: courses, exercises and toy versions of schemes that need small
+  dense linear algebra over a prime field (secret sharing, erasure codes, R1CS by hand).
+- Code that already uses arkworks 0.4 field types and needs a determinant, inverse or solve
+  without writing Gaussian elimination again.
+
+## Not for
+
+- Production or secret data: it is not constant time (it branches on the values) and it has
+  not been audited.
+- Large or sparse matrices: rows are `Vec<Vec<F>>`, operations are O(n^3) (the adjugate is
+  O(n^5)), and errors panic instead of returning `Result`.
+- Matrices over GF(2): [bitgauss](https://crates.io/crates/bitgauss) is much faster there. In
+  Python, [galois](https://github.com/mhostetter/galois) and SageMath do all of this and more.
 
 ## Example
 
 ```rust
-// Arkworks has a macro to generate the modulus and generator for a finite field.
-// Type F is field element for use in our matrix.
-// You should be able to use any. This is just an example.
 use ark_ff::{Fp64, MontBackend};
+use field_matrix_utils::Matrix;
+
+// A prime field: the integers modulo 127. Any arkworks field works.
 #[derive(ark_ff::MontConfig)]
 #[modulus = "127"]
 #[generator = "6"]
 pub struct F127Config;
 type F = Fp64<MontBackend<F127Config, 1>>;
 
-// The good stuff starts here.
 let a: Matrix<F> = Matrix::new(vec![
     vec![F::from(1), F::from(2)],
     vec![F::from(3), F::from(4)],
 ]);
-let b: Matrix<F> = a.transpose();
-let c: Matrix<F> = a + b;
-let d: Matrix<F> = a * b;
-let det: F = a.determinant();
-...
+
+// Methods take the matrix by value: clone it to keep using it.
+let b = a.clone().transpose();
+let product = a.clone() * b;
+assert_eq!(product.get_element(0, 0), F::from(5));
+
+// 1 * 4 - 2 * 3 = -2, that is 125 modulo 127
+assert_eq!(a.clone().determinant(), -F::from(2));
+
+let inverse = a.clone().inverse().expect("the determinant is not zero");
+assert!((a.clone() * inverse).is_identity());
+
+// Solve a * x = [1, 2]
+let x = a.clone().ax_b_solve_for_x(vec![F::from(1), F::from(2)]);
+assert_eq!(a.mul_vec(x), vec![F::from(1), F::from(2)]);
 ```
 
-## Features:
+## Features
 
-- Addition
-- Subtraction
-- Multiplication
-- Transpose
-- Determinant
-- Inverse
-- Is square
-- Adjoint
-- LU decomposition
-- Scalar multiplication
-- Vector multiplication
-- Sumation
-- Get element at index
-- Set element at index
-- Is identity
-- Equality
-- Display
-- Linear equations Ax = b for x solution
+- `+`, `-`, `*` between matrices, `==`, and `Display`
+- `scalar_mul`, `mul_vec` (A * v), `sum_of_matrix`, `transpose`
+- `determinant`, `inverse` (`None` when singular), `adjoint` (the adjugate)
+- `ax_b_solve_for_x` (Gaussian elimination with row exchanges) and `lu_decomposition`
+  (Doolittle, without row exchanges)
+- `is_square`, `is_diagonal`, `is_identity`, `get_element`, `set_element`
+
+## Upgrading from 0.1.1 or earlier
+
+Those versions gave wrong results: `ax_b_solve_for_x` returned wrong solutions, `mul_vec`
+computed v * A instead of A * v, and `adjoint` returned the transpose. They also panicked on
+valid input. Details in the
+[changelog](https://github.com/EdgarBarrantes/field-matrix/blob/master/CHANGELOG.md).
+
+## Install
+
+```toml
+[dependencies]
+field-matrix-utils = "0.1"
+ark-ff = "0.4"
+```
+
+## Development
+
+`cargo test` runs the unit tests, the doc examples and `tests/random.rs`, which checks every
+operation against its definition on random matrices over two fields (the determinant by the
+permutation formula, `A * inverse == I`, `A * adjoint == det * I`, `A * x == b`...).
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT)
+at your option.

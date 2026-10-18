@@ -1,57 +1,77 @@
-//! Simple matrix library for Rust.
-//! Used for use with Finite fields.
+//! Dense matrices over finite fields, for Rust: arithmetic, determinant, inverse, adjugate, LU
+//! decomposition and linear systems (Ax = b), with any [arkworks](https://arkworks.rs) field
+//! (`ark_ff::Field`, ark-ff 0.4) as the element type.
 //!
-//! Not safe for production use.
-//! It was only done for educational purposes.
+//! Exact arithmetic modulo a prime has no rounding, so a matrix inverse or a solved system is
+//! exactly right or the matrix is singular. That is what you need for exercises in cryptography,
+//! coding theory and zero-knowledge proofs, where general-purpose matrix crates such as nalgebra
+//! don't fit: their inverse and LU need real or complex numbers.
 //!
-//! **Upgrade from 0.1.1 or earlier:** those versions gave wrong results. `ax_b_solve_for_x` returned
-//! wrong solutions, `mul_vec` computed v * A instead of A * v, and `adjoint` returned the transpose.
-//! They also panicked on valid input: invertible matrices that need row exchanges, non-square
-//! matrices in `scalar_mul` and `==`, and empty matrices. See [CHANGELOG.md](CHANGELOG.md).
+//! ## Who it's for
 //!
-//! # Example
-//! ```
-//! // Arkworks has a macro to generate the modulus and generator for a finite field.
-//! // Type F is field element for use in our matrix.
-//! // You should be able to use any. This is just an example.
+//! - Learning and prototyping: courses, exercises and toy versions of schemes that need small
+//!   dense linear algebra over a prime field (secret sharing, erasure codes, R1CS by hand).
+//! - Code that already uses arkworks 0.4 field types and needs a determinant, inverse or solve
+//!   without writing Gaussian elimination again.
+//!
+//! ## Not for
+//!
+//! - Production or secret data: it is not constant time (it branches on the values) and it has
+//!   not been audited.
+//! - Large or sparse matrices: rows are `Vec<Vec<F>>`, operations are O(n^3) (the adjugate is
+//!   O(n^5)), and errors panic instead of returning `Result`.
+//! - Matrices over GF(2): [bitgauss](https://crates.io/crates/bitgauss) is much faster there. In
+//!   Python, [galois](https://github.com/mhostetter/galois) and SageMath do all of this and more.
+//!
+//! ## Example
+//!
+//! ```rust
 //! use ark_ff::{Fp64, MontBackend};
+//! use field_matrix_utils::Matrix;
+//!
+//! // A prime field: the integers modulo 127. Any arkworks field works.
 //! #[derive(ark_ff::MontConfig)]
 //! #[modulus = "127"]
 //! #[generator = "6"]
 //! pub struct F127Config;
 //! type F = Fp64<MontBackend<F127Config, 1>>;
 //!
-//! // The good stuff starts here.
 //! let a: Matrix<F> = Matrix::new(vec![
 //!     vec![F::from(1), F::from(2)],
 //!     vec![F::from(3), F::from(4)],
 //! ]);
-//! let b: Matrix<F> = a.transpose();
-//! let c: Matrix<F> = a + b;
-//! let d: Matrix<F> = a * b;
-//! let det: F = a.determinant();
-//! ...
-//! ```
-//! # Features:
-//! - Addition
-//! - Subtraction
-//! - Multiplication
-//! - Transpose
-//! - Determinant
-//! - Inverse
-//! - Is square
-//! - Adjoint
-//! - LU decomposition
-//! - Scalar multiplication
-//! - Vector multiplication
-//! - Sumation
-//! - Get element at index
-//! - Set element at index
-//! - Is identity
-//! - Equality
-//! - Display
-//! - Linear equations Ax = b for x solution
 //!
+//! // Methods take the matrix by value: clone it to keep using it.
+//! let b = a.clone().transpose();
+//! let product = a.clone() * b;
+//! assert_eq!(product.get_element(0, 0), F::from(5));
+//!
+//! // 1 * 4 - 2 * 3 = -2, that is 125 modulo 127
+//! assert_eq!(a.clone().determinant(), -F::from(2));
+//!
+//! let inverse = a.clone().inverse().expect("the determinant is not zero");
+//! assert!((a.clone() * inverse).is_identity());
+//!
+//! // Solve a * x = [1, 2]
+//! let x = a.clone().ax_b_solve_for_x(vec![F::from(1), F::from(2)]);
+//! assert_eq!(a.mul_vec(x), vec![F::from(1), F::from(2)]);
+//! ```
+//!
+//! ## Features
+//!
+//! - `+`, `-`, `*` between matrices, `==`, and `Display`
+//! - `scalar_mul`, `mul_vec` (A * v), `sum_of_matrix`, `transpose`
+//! - `determinant`, `inverse` (`None` when singular), `adjoint` (the adjugate)
+//! - `ax_b_solve_for_x` (Gaussian elimination with row exchanges) and `lu_decomposition`
+//!   (Doolittle, without row exchanges)
+//! - `is_square`, `is_diagonal`, `is_identity`, `get_element`, `set_element`
+//!
+//! ## Upgrading from 0.1.1 or earlier
+//!
+//! Those versions gave wrong results: `ax_b_solve_for_x` returned wrong solutions, `mul_vec`
+//! computed v * A instead of A * v, and `adjoint` returned the transpose. They also panicked on
+//! valid input. Details in the
+//! [changelog](https://github.com/EdgarBarrantes/field-matrix/blob/master/CHANGELOG.md).
 
 use core::ops::{Add, Mul, Sub};
 use std::fmt;
@@ -164,10 +184,18 @@ impl<F: Field> Matrix<F> {
     /// Creates a new matrix from a vector of vectors.
     /// ## Example
     /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
     /// let a: Matrix<F> = Matrix::new(vec![
-    ///     vec![F::from(2), F::from(2)],
+    ///     vec![F::from(1), F::from(2)],
     ///     vec![F::from(3), F::from(4)],
     /// ]);
+    /// assert_eq!(a.get_element(1, 0), F::from(3));
     /// ```
     /// ## Panics
     /// Panics if the rows don't all have the same length.
@@ -235,8 +263,16 @@ impl<F: Field> Matrix<F> {
     /// Returns whether or not the matrix is square.
     /// ## Example
     /// ```
-    /// let is_square: bool = a.is_square();
-    /// assert!(is_square);
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert!(a.is_square());
     /// ```
     pub fn is_square(self) -> bool {
         let num_rows = self.matrix.len();
@@ -252,7 +288,17 @@ impl<F: Field> Matrix<F> {
     /// Returns the determinant of the matrix.
     /// ## Example
     /// ```
-    /// let det: F = a.determinant();
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// // 1 * 4 - 2 * 3
+    /// assert_eq!(a.determinant(), -F::from(2));
     /// ```
     pub fn determinant(mut self) -> F {
         assert_eq!(
@@ -300,8 +346,18 @@ impl<F: Field> Matrix<F> {
     /// Returns whether or not the matrix is diagonal.
     /// ## Example
     /// ```
-    /// let is_diagonal: bool = a.is_diagonal();
-    /// assert!(is_diagonal);
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert!(!a.is_diagonal());
+    /// let d: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(0)], vec![F::from(0), F::from(4)]]);
+    /// assert!(d.is_diagonal());
     /// ```
     pub fn is_diagonal(self) -> bool {
         let num_rows = self.matrix.len();
@@ -325,7 +381,17 @@ impl<F: Field> Matrix<F> {
     /// Returns the transpose of the matrix.
     /// ## Example
     /// ```
-    /// let b: Matrix<F> = a.transpose();
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// let t = a.transpose();
+    /// assert_eq!(t.get_element(0, 1), F::from(3));
     /// ```
     pub fn transpose(self) -> Matrix<F> {
         let num_rows = self.matrix.len();
@@ -346,7 +412,19 @@ impl<F: Field> Matrix<F> {
     /// so that `a * a.adjoint() == det(a) * I`, also when `a` is singular.
     /// ## Example
     /// ```
-    /// let b: Matrix<F> = a.adjoint();
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert_eq!(
+    ///     a.adjoint(),
+    ///     Matrix::new(vec![vec![F::from(4), -F::from(2)], vec![-F::from(3), F::from(1)]])
+    /// );
     /// ```
     /// ## Panics
     /// Panics if the matrix is not square.
@@ -391,7 +469,20 @@ impl<F: Field> Matrix<F> {
     /// Returns the inverse of the matrix, or None if it is not invertible.
     /// ## Example
     /// ```
-    /// let b: Matrix<F> = a.inverse().unwrap();
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// let inverse = a.clone().inverse().unwrap();
+    /// assert!((a * inverse).is_identity());
+    ///
+    /// let singular: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(2), F::from(4)]]);
+    /// assert_eq!(singular.inverse(), None);
     /// ```
     /// ## Panics
     /// Panics if the matrix is not square.
@@ -408,8 +499,18 @@ impl<F: Field> Matrix<F> {
     /// Returns whether or not the matrix is the identity matrix.
     /// ## Example
     /// ```
-    /// let is_identity: bool = a.is_identity();
-    /// assert!(is_identity);
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert!(!a.is_identity());
+    /// let i: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(0)], vec![F::from(0), F::from(1)]]);
+    /// assert!(i.is_identity());
     /// ```
     /// ## Notes
     /// This function returns false if the matrix is empty.
@@ -438,7 +539,19 @@ impl<F: Field> Matrix<F> {
     /// Solves the system of linear equations Ax = b for x.
     /// ## Example
     /// ```
-    /// let x: Vec<F> = a.ax_b_solve_for_x(b);
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// let b = vec![F::from(1), F::from(2)];
+    /// let x = a.clone().ax_b_solve_for_x(b.clone());
+    /// assert_eq!(x, vec![F::from(0), F::from(1) / F::from(2)]);
+    /// assert_eq!(a.mul_vec(x), b);
     /// ```
     /// ## Panics
     /// Panics if the matrix is not square, if b has the wrong length, or if the determinant
@@ -464,7 +577,17 @@ impl<F: Field> Matrix<F> {
     /// Returns the LU decomposition of the matrix.
     /// ## Example
     /// ```
-    /// let (l, u): (Matrix<F>, Matrix<F>) = a.lu_decomposition();
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// let (l, u) = a.lu_decomposition();
+    /// assert_eq!(l * u, a);
     /// ```
     /// ## Panics
     /// Panics if the matrix is not square, if its determinant is zero, or if it needs row
@@ -521,7 +644,16 @@ impl<F: Field> Matrix<F> {
     /// Multiplies the matrix by a scalar.
     /// ## Example
     /// ```
-    /// let c: Matrix<F> = a.scalar_mul(b);
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert_eq!(a.clone().scalar_mul(F::from(2)), a.clone() + a);
     /// ```
     /// ## Notes
     /// This function is equivalent to multiplying each element of the matrix by the scalar.
@@ -543,7 +675,17 @@ impl<F: Field> Matrix<F> {
     /// Multiplies the matrix by a vector.
     /// ## Example
     /// ```
-    /// let c: Vec<F> = a.mul_vec(b);
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// // [1 * 1 + 2 * 2, 3 * 1 + 4 * 2]
+    /// assert_eq!(a.mul_vec(vec![F::from(1), F::from(2)]), vec![F::from(5), F::from(11)]);
     /// ```
     /// ## Panics
     /// Panics if the number of columns in the matrix is not equal to the number of elements in
@@ -572,7 +714,16 @@ impl<F: Field> Matrix<F> {
     /// Returns the sum of all the elements in the matrix.
     /// ## Example
     /// ```
-    /// let c: F = a.sum_of_matrix();
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert_eq!(a.sum_of_matrix(), F::from(10));
     /// ```
     /// ## Notes
     /// This function is equivalent to summing all the elements in the matrix.
@@ -594,12 +745,18 @@ impl<F: Field> Matrix<F> {
     /// Sets a specific element in the matrix.
     /// ## Example
     /// ```
-    /// type F = Field;
-    /// let a: Matrix<F> = Matrix::new(vec![
-    ///     vec![F::from(2), F::from(2)],
-    ///     vec![F::from(3), F::from(4)],
-    /// ]);
-    /// a.set_element(0, 0, F::from(1));
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// let mut a = a;
+    /// a.set_element(0, 0, F::from(9));
+    /// assert_eq!(a.get_element(0, 0), F::from(9));
     /// ```
     /// ## Panics
     /// Panics if the row or column is out of bounds.
@@ -622,12 +779,16 @@ impl<F: Field> Matrix<F> {
     /// Gets a specific element in the matrix.
     /// ## Example
     /// ```
-    /// let a: Matrix<F> = Matrix::new(vec![
-    ///   vec![F::from(2), F::from(2)],
-    ///   vec![F::from(3), F::from(4)],
-    /// ]);
-    /// let b: F = a.get_element(0, 0);
-    /// assert_eq!(b, F::from(2));
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # let a: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]);
+    /// // a = [[1, 2], [3, 4]] over the integers modulo 127
+    /// assert_eq!(a.get_element(0, 1), F::from(2));
     /// ```
     /// ## Panics
     /// Panics if the row or column is out of bounds.

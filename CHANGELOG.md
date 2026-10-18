@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+Documentation only:
+- Every example in the docs is now compiled and checked by `cargo test`; the crate example was
+  missing a step and didn't compile.
+- README and crate docs say who the crate is for, what it isn't for (not constant time, small dense
+  matrices only) and the alternatives.
+- License files (MIT and Apache-2.0, as already declared in `Cargo.toml`).
+
 ## 0.1.2
 
 Fixes wrong results and panics. If you used 0.1.1 or earlier, check results from the functions below.
