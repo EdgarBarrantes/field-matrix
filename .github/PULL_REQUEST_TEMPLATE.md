@@ -22,5 +22,5 @@ write a little note why.
 - [ ] Linked to GitHub issue with discussion and accepted design OR have an explanation in the PR that describes this work.
 - [ ] Wrote unit tests
 - [ ] Updated relevant documentation in the code
-- [ ] Added a relevant changelog entry to the `Pending` section in `CHANGELOG.md`
+- [ ] Added a relevant changelog entry to the `Unreleased` section in `CHANGELOG.md`
 - [ ] Re-reviewed `Files changed` in the GitHub PR explorer

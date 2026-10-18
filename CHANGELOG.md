@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: evaluate a polynomial whose
+  coefficients are matrices or vectors at a point (`M_0 + alpha * M_1 + ... + alpha^k * M_k`), as
+  used to batch checks with a random linear combination. From
+  [#6](https://github.com/EdgarBarrantes/field-matrix/pull/6) by Edgar Barrantes and Isaac
+  Villalobos.
+- The matrix code lives in its own module: `Matrix` is also available as
+  `field_matrix_utils::matrix::Matrix`.
+
 ## 0.1.3
 
 Documentation only:

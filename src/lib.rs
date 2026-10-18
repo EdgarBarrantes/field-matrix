@@ -65,6 +65,8 @@
 //! - `ax_b_solve_for_x` (Gaussian elimination with row exchanges) and `lu_decomposition`
 //!   (Doolittle, without row exchanges)
 //! - `is_square`, `is_diagonal`, `is_identity`, `get_element`, `set_element`
+//! - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: `M_0 + alpha * M_1 + ... +
+//!   alpha^k * M_k`, the random linear combination proof systems use to batch checks
 //!
 //! ## Upgrading from 0.1.1 or earlier
 //!
@@ -74,5 +76,7 @@
 //! [changelog](https://github.com/EdgarBarrantes/field-matrix/blob/master/CHANGELOG.md).
 
 pub mod matrix;
+pub mod polynomial;
 
 pub use matrix::Matrix;
+pub use polynomial::{evaluate_matrix_polynomial, evaluate_vector_polynomial};
