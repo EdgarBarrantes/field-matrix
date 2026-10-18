@@ -7,6 +7,10 @@ Breaking:
   from the `AdditiveGroup` trait, so code using `F::ZERO` on a concrete field type needs
   `use ark_ff::AdditiveGroup`.
 
+Other:
+- Benchmarks (`cargo bench`, `benches/`) with recorded results in `benches/RESULTS.md`, so changes
+  in speed are visible over time.
+
 ## 0.1.4
 
 - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: evaluate a polynomial whose
