@@ -82,7 +82,7 @@ pub fn evaluate_vector_polynomial<F: Field>(coefficients: &[Vec<F>], alpha: F) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ff::{Fp64, MontBackend};
+    use ark_ff::{AdditiveGroup, Fp64, MontBackend};
 
     #[derive(ark_ff::MontConfig)]
     #[modulus = "127"]

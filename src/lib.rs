@@ -1,6 +1,6 @@
 //! Dense matrices over finite fields, for Rust: arithmetic, determinant, inverse, adjugate, LU
 //! decomposition and linear systems (Ax = b), with any [arkworks](https://arkworks.rs) field
-//! (`ark_ff::Field`, ark-ff 0.4) as the element type.
+//! (`ark_ff::Field`, ark-ff 0.6) as the element type.
 //!
 //! Exact arithmetic modulo a prime has no rounding, so a matrix inverse or a solved system is
 //! exactly right or the matrix is singular. That is what you need for exercises in cryptography,
@@ -11,7 +11,7 @@
 //!
 //! - Learning and prototyping: courses, exercises and toy versions of schemes that need small
 //!   dense linear algebra over a prime field (secret sharing, erasure codes, R1CS by hand).
-//! - Code that already uses arkworks 0.4 field types and needs a determinant, inverse or solve
+//! - Code that already uses arkworks 0.6 field types and needs a determinant, inverse or solve
 //!   without writing Gaussian elimination again.
 //!
 //! ## Not for

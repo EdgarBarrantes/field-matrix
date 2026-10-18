@@ -1,7 +1,7 @@
 //! Checks every operation against definitions on many random matrices, over a tiny field
 //! (lots of singular matrices and zero pivots) and a larger one.
 
-use ark_ff::{Field, Fp64, MontBackend};
+use ark_ff::{AdditiveGroup, Field, Fp64, MontBackend};
 use field_matrix_utils::Matrix;
 
 #[derive(ark_ff::MontConfig)]

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased (0.2.0)
+
+Breaking:
+- ark-ff 0.6 (was 0.4): use field types from ark-ff 0.6. In ark-ff 0.5 and later, `ZERO` comes
+  from the `AdditiveGroup` trait, so code using `F::ZERO` on a concrete field type needs
+  `use ark_ff::AdditiveGroup`.
+
 ## 0.1.4
 
 - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: evaluate a polynomial whose

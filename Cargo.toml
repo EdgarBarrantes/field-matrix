@@ -12,7 +12,7 @@ categories = ["algorithms", "data-structures", "mathematics"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-ark-ff = "0.4.1"
+ark-ff = "0.6"
 
 [lib]
 path = "src/lib.rs"
