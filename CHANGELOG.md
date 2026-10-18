@@ -45,6 +45,13 @@ New:
 - `counting`: `Counting<F>` counts the field operations done with it (`counting::count`), and
   `cargo run --example operation_counts` prints naive against fast by matrix size.
 - `pow`, by square-and-multiply.
+- `reduced_row_echelon_form`, `rank`, `kernel` (a basis of the null space) and `solve_all`: every
+  solution of `A x = b` for a matrix of any shape (`None` when there is none), as one solution
+  plus the kernel.
+- `trace` and `characteristic_polynomial` (Berkowitz's algorithm, which never divides, so it works
+  in small fields where Faddeev-LeVerrier would divide by zero).
+- `Matrix::vandermonde`, `polynomial::interpolate` (the polynomial through given points) and
+  `polynomial::evaluate_polynomial`.
 - `adjugate` no longer computes n^2 cofactors (about n^5 work): det(A) * A^-1 when invertible, a
   rank-one matrix from the kernels when the rank is n - 1, zero below. The cofactor version is
   `naive::adjugate`.

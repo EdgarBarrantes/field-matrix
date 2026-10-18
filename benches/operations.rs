@@ -150,6 +150,24 @@ fn operations(c: &mut Criterion) {
         bench.iter(|| black_box(naive::pow(&a, 64)))
     });
     group.finish();
+
+    let mut group = c.benchmark_group("characteristic_polynomial");
+    for n in SIZES {
+        let a = rng.matrix(n);
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
+            bench.iter(|| black_box(a.characteristic_polynomial()))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("rank");
+    for n in SIZES {
+        let a = rng.matrix(n);
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
+            bench.iter(|| black_box(a.rank()))
+        });
+    }
+    group.finish();
 }
 
 criterion_group!(benches, operations);

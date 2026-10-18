@@ -4,6 +4,10 @@
 //! checking every `M_i`, they check `M_0 + alpha * M_1 + ... + alpha^k * M_k` for a random
 //! challenge `alpha`. That is the polynomial `M_0 + M_1 x + ... + M_k x^k` evaluated at
 //! `x = alpha`, which these functions compute with Horner's rule (`k` scalar multiplications).
+//!
+//! Also plain polynomials with field coefficients: [`evaluate_polynomial`], and [`interpolate`],
+//! which finds the polynomial through given points by solving a system with the
+//! [`Matrix::vandermonde`] matrix. Coefficients always go from the constant term up.
 
 use crate::scalar::Scalar;
 use crate::{Matrix, MatrixError};
@@ -83,6 +87,87 @@ pub fn evaluate_vector_polynomial<F: Scalar>(
     }))
 }
 
+/// Evaluates `c_0 + c_1 x + ... + c_k x^k` at `x`, by Horner's rule; `coefficients` is
+/// `[c_0, c_1, ..., c_k]` (an empty list is the zero polynomial).
+/// ## Example
+/// ```
+/// # use ark_ff::{Fp64, MontBackend};
+/// # #[derive(ark_ff::MontConfig)]
+/// # #[modulus = "127"]
+/// # #[generator = "6"]
+/// # pub struct F127Config;
+/// # type F = Fp64<MontBackend<F127Config, 1>>;
+/// use field_matrix_utils::polynomial::evaluate_polynomial;
+///
+/// // 1 + 2x + 3x^2 at x = 2
+/// let p = [F::from(1), F::from(2), F::from(3)];
+/// assert_eq!(evaluate_polynomial(&p, F::from(2)), F::from(17));
+/// ```
+pub fn evaluate_polynomial<F: Scalar>(coefficients: &[F], x: F) -> F {
+    coefficients
+        .iter()
+        .rev()
+        .fold(F::ZERO_ELEMENT, |acc, &c| acc * x + c)
+}
+
+/// The polynomial of degree below `n` through the `n` points `(xs[i], ys[i])`, as coefficients from
+/// the constant term up: the solution of `V c = ys` with `V` the [Vandermonde
+/// matrix](Matrix::vandermonde) of `xs` (about n^3 multiplications; Lagrange or Newton
+/// interpolation would take about n^2).
+/// ## Example
+/// ```
+/// # use ark_ff::{Fp64, MontBackend};
+/// # #[derive(ark_ff::MontConfig)]
+/// # #[modulus = "127"]
+/// # #[generator = "6"]
+/// # pub struct F127Config;
+/// # type F = Fp64<MontBackend<F127Config, 1>>;
+/// use field_matrix_utils::polynomial::{evaluate_polynomial, interpolate};
+///
+/// // The line through (1, 3) and (2, 5): 1 + 2x
+/// let p = interpolate(&[F::from(1), F::from(2)], &[F::from(3), F::from(5)]).unwrap();
+/// assert_eq!(p, vec![F::from(1), F::from(2)]);
+/// assert_eq!(evaluate_polynomial(&p, F::from(10)), F::from(21));
+/// ```
+/// ## Errors
+/// [`MatrixError::DimensionMismatch`] if `xs` and `ys` have different lengths;
+/// [`MatrixError::Singular`] if two points share the same `x`.
+pub fn interpolate<F: Scalar>(xs: &[F], ys: &[F]) -> Result<Vec<F>, MatrixError> {
+    if xs.len() != ys.len() {
+        return Err(MatrixError::DimensionMismatch);
+    }
+    Matrix::vandermonde(xs).solve(ys)
+}
+
+impl<F: Scalar> Matrix<F> {
+    /// The square Vandermonde matrix of `points`: row `i` is `1, x_i, x_i^2, ..., x_i^(n-1)`.
+    /// Multiplying it by a polynomial's coefficients evaluates the polynomial at every point; it is
+    /// invertible exactly when the points are distinct.
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// let v: Matrix<F> = Matrix::vandermonde(&[F::from(2), F::from(3)]);
+    /// assert_eq!(v, Matrix::from_rows(vec![vec![F::from(1), F::from(2)], vec![F::from(1), F::from(3)]]).unwrap());
+    /// ```
+    pub fn vandermonde(points: &[F]) -> Matrix<F> {
+        let n = points.len();
+        let mut v = Matrix::zeros(n, n);
+        for (i, &x) in points.iter().enumerate() {
+            let mut power = F::ONE_ELEMENT;
+            for j in 0..n {
+                v[(i, j)] = power;
+                power *= x;
+            }
+        }
+        v
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -67,9 +67,12 @@
 //! - `scalar_mul`, `mul_vec` (A * v), `sum`, `transpose`, `get`, `set`
 //! - `determinant`, `inverse`, `adjugate`, `solve` (Gaussian elimination with row exchanges) and
 //!   `lu_decomposition` (Doolittle, without row exchanges)
+//! - `reduced_row_echelon_form`, `rank`, `kernel`, `solve_all` (every solution of `A x = b`, any
+//!   shape), `trace`, `characteristic_polynomial` (Berkowitz, division-free)
 //! - `pow` (square-and-multiply), `is_square`, `is_diagonal`, `is_identity`
 //! - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: `M_0 + alpha * M_1 + ... +
 //!   alpha^k * M_k`, the random linear combination proof systems use to batch checks
+//! - `Matrix::vandermonde`, `polynomial::interpolate` and `polynomial::evaluate_polynomial`
 //!
 //! Methods that can fail return a [`MatrixError`]; the operators panic if the sizes don't fit.
 //!
@@ -99,5 +102,5 @@ pub mod naive;
 pub mod polynomial;
 pub mod scalar;
 
-pub use matrix::{Matrix, MatrixError};
+pub use matrix::{Matrix, MatrixError, Solutions};
 pub use polynomial::{evaluate_matrix_polynomial, evaluate_vector_polynomial};

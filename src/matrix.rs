@@ -54,6 +54,16 @@ impl fmt::Display for MatrixError {
 
 impl std::error::Error for MatrixError {}
 
+/// Every solution of a linear system, from [`Matrix::solve_all`]: `particular` plus any
+/// combination of the `kernel` vectors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Solutions<F: Scalar> {
+    /// One solution.
+    pub particular: Vec<F>,
+    /// A basis of the kernel of the matrix (empty when the solution is unique).
+    pub kernel: Vec<Vec<F>>,
+}
+
 /// Prints one row per line, entries as numbers, aligned by column:
 ///
 /// ```text
@@ -725,50 +735,233 @@ impl<F: Scalar> Matrix<F> {
         })
     }
 
-    /// The rank, and a non-zero `x` with `A x = 0` if there is one, by reduction to row echelon
-    /// form.
-    pub(crate) fn rank_and_kernel_vector(&self) -> (usize, Option<Vec<F>>) {
+    /// The reduced row echelon form, and the columns of its pivots.
+    ///
+    /// Gauss-Jordan elimination with row exchanges on a matrix of any shape: each pivot is 1, the
+    /// only non-zero entry of its column, and further right than the pivot of the row above. The
+    /// number of pivots is the rank.
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// // [[1, 2, 3],
+    /// //  [2, 4, 7]]  ->  [[1, 2, 0],
+    /// //                   [0, 0, 1]], pivots in columns 0 and 2
+    /// let a: Matrix<F> = Matrix::from_rows(vec![
+    ///     vec![F::from(1), F::from(2), F::from(3)],
+    ///     vec![F::from(2), F::from(4), F::from(7)],
+    /// ])
+    /// .unwrap();
+    /// let (r, pivots) = a.reduced_row_echelon_form();
+    /// assert_eq!(pivots, vec![0, 2]);
+    /// assert_eq!(r[(0, 1)], F::from(2));
+    /// assert_eq!(r[(1, 2)], F::from(1));
+    /// ```
+    pub fn reduced_row_echelon_form(&self) -> (Matrix<F>, Vec<usize>) {
         let (rows, columns) = (self.rows, self.columns);
-        let mut a = self.data.clone();
+        let mut r = self.clone();
         let mut pivots = Vec::new();
         for c in 0..columns {
-            let r = pivots.len();
-            if r == rows {
+            let row = pivots.len();
+            if row == rows {
                 break;
             }
-            let Some(p) = (r..rows).find(|&p| a[p * columns + c] != F::ZERO_ELEMENT) else {
+            let Some(p) = (row..rows).find(|&p| r[(p, c)] != F::ZERO_ELEMENT) else {
                 continue;
             };
             for k in 0..columns {
-                a.swap(r * columns + k, p * columns + k);
+                r.data.swap(row * columns + k, p * columns + k);
             }
-            let pivot_inverse = a[r * columns + c].invert().expect("pivot is not zero");
-            for k in 0..columns {
-                a[r * columns + k] *= pivot_inverse;
+            let pivot_inverse = r[(row, c)].invert().expect("pivot is not zero");
+            for k in c..columns {
+                r[(row, k)] *= pivot_inverse;
             }
-            for other in (0..rows).filter(|&other| other != r) {
-                let factor = a[other * columns + c];
+            for other in (0..rows).filter(|&other| other != row) {
+                let factor = r[(other, c)];
                 if factor != F::ZERO_ELEMENT {
-                    for k in 0..columns {
-                        let value = a[r * columns + k];
-                        a[other * columns + k] -= factor * value;
+                    for k in c..columns {
+                        let value = r[(row, k)];
+                        r[(other, k)] -= factor * value;
                     }
                 }
             }
             pivots.push(c);
         }
+        (r, pivots)
+    }
 
-        // A column without a pivot is free: set it to 1, and solve each pivot variable from its
-        // row of the reduced form.
-        let kernel = (0..columns).find(|c| !pivots.contains(c)).map(|free| {
-            let mut x = vec![F::ZERO_ELEMENT; columns];
-            x[free] = F::ONE_ELEMENT;
-            for (r, &pivot) in pivots.iter().enumerate() {
-                x[pivot] = -a[r * columns + free];
+    /// The rank: the number of linearly independent rows (or columns).
+    pub fn rank(&self) -> usize {
+        self.reduced_row_echelon_form().1.len()
+    }
+
+    /// A basis of the kernel (null space): vectors `x` with `A x = 0`, one per column without a
+    /// pivot, so `columns - rank` of them. Every solution of `A x = 0` is a combination of these.
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// // x + 2y = 0 has the solutions t * (-2, 1)
+    /// let a: Matrix<F> = Matrix::from_rows(vec![vec![F::from(1), F::from(2)]]).unwrap();
+    /// let kernel = a.kernel();
+    /// assert_eq!(kernel, vec![vec![-F::from(2), F::from(1)]]);
+    /// assert_eq!(a.mul_vec(&kernel[0]), Ok(vec![F::from(0)]));
+    /// ```
+    pub fn kernel(&self) -> Vec<Vec<F>> {
+        let (r, pivots) = self.reduced_row_echelon_form();
+        Self::kernel_from(&r, &pivots, self.columns)
+    }
+
+    /// The kernel basis from a reduced row echelon form of a matrix with `columns` columns (only its
+    /// first `columns` columns are read): each free column set to 1 in turn, each pivot variable
+    /// solved from its row.
+    fn kernel_from(r: &Matrix<F>, pivots: &[usize], columns: usize) -> Vec<Vec<F>> {
+        (0..columns)
+            .filter(|c| !pivots.contains(c))
+            .map(|free| {
+                let mut x = vec![F::ZERO_ELEMENT; columns];
+                x[free] = F::ONE_ELEMENT;
+                for (row, &pivot) in pivots.iter().enumerate() {
+                    x[pivot] = -r[(row, free)];
+                }
+                x
+            })
+            .collect()
+    }
+
+    /// Every solution of `A x = b`, for a matrix of any shape: `None` if there is none, otherwise
+    /// one solution and a basis of the kernel; the solutions are that one plus any combination of
+    /// the kernel vectors (a single solution when the kernel is empty).
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// // x + 2y = 3: (3, 0) + t * (-2, 1)
+    /// let a: Matrix<F> = Matrix::from_rows(vec![vec![F::from(1), F::from(2)]]).unwrap();
+    /// let solutions = a.solve_all(&[F::from(3)]).unwrap().unwrap();
+    /// assert_eq!(solutions.particular, vec![F::from(3), F::from(0)]);
+    /// assert_eq!(solutions.kernel, vec![vec![-F::from(2), F::from(1)]]);
+    ///
+    /// // x + 2y = 3 and 2x + 4y = 5 contradict each other
+    /// let b: Matrix<F> = Matrix::from_rows(vec![vec![F::from(1), F::from(2)], vec![F::from(2), F::from(4)]]).unwrap();
+    /// assert_eq!(b.solve_all(&[F::from(3), F::from(5)]), Ok(None));
+    /// ```
+    /// ## Errors
+    /// [`MatrixError::DimensionMismatch`] if `b` doesn't have one entry per row.
+    pub fn solve_all(&self, b: &[F]) -> Result<Option<Solutions<F>>, MatrixError> {
+        if b.len() != self.rows {
+            return Err(MatrixError::DimensionMismatch);
+        }
+        let columns = self.columns;
+        let augmented = Matrix::from_fn(self.rows, columns + 1, |i, j| {
+            if j < columns {
+                self[(i, j)]
+            } else {
+                b[i]
             }
-            x
         });
+        let (r, pivots) = augmented.reduced_row_echelon_form();
+        if pivots.last() == Some(&columns) {
+            // A pivot in the b column: a row reads 0 = 1.
+            return Ok(None);
+        }
+        let mut particular = vec![F::ZERO_ELEMENT; columns];
+        for (row, &pivot) in pivots.iter().enumerate() {
+            particular[pivot] = r[(row, columns)];
+        }
+        Ok(Some(Solutions {
+            particular,
+            kernel: Self::kernel_from(&r, &pivots, columns),
+        }))
+    }
+
+    /// The rank, and one kernel vector if there is one (for the adjugate).
+    pub(crate) fn rank_and_kernel_vector(&self) -> (usize, Option<Vec<F>>) {
+        let (r, pivots) = self.reduced_row_echelon_form();
+        let kernel = Self::kernel_from(&r, &pivots, self.columns)
+            .into_iter()
+            .next();
         (pivots.len(), kernel)
+    }
+
+    /// The trace: the sum of the diagonal entries.
+    /// ## Errors
+    /// [`MatrixError::NotSquare`].
+    pub fn trace(&self) -> Result<F, MatrixError> {
+        if !self.is_square() {
+            return Err(MatrixError::NotSquare);
+        }
+        Ok((0..self.rows).fold(F::ZERO_ELEMENT, |acc, i| acc + self[(i, i)]))
+    }
+
+    /// The characteristic polynomial `det(x I - A)`, as coefficients from the constant term up:
+    /// `[c_0, c_1, ..., c_n]` with `c_n = 1`, `c_(n-1) = -trace(A)` and `c_0 = (-1)^n det(A)`.
+    ///
+    /// Berkowitz's algorithm: it adds one row and column at a time and never divides, so it works
+    /// in every field, about n^4 multiplications. The well-known Faddeev-LeVerrier method divides
+    /// by 1, 2, ..., n, which fails in a field whose characteristic is at most n (in GF(7), 7 is 0).
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// # use field_matrix_utils::evaluate_matrix_polynomial;
+    /// // [[1, 2], [3, 4]]: x^2 - 5x - 2
+    /// let a: Matrix<F> = Matrix::from_rows(vec![vec![F::from(1), F::from(2)], vec![F::from(3), F::from(4)]]).unwrap();
+    /// let p = a.characteristic_polynomial().unwrap();
+    /// assert_eq!(p, vec![-F::from(2), -F::from(5), F::from(1)]);
+    ///
+    /// // Cayley-Hamilton: p(A) = 0
+    /// let terms: Vec<Matrix<F>> = (0..p.len()).map(|k| a.pow(k as u64).unwrap().scalar_mul(p[k])).collect();
+    /// let sum = terms.iter().fold(Matrix::zeros(2, 2), |acc, t| &acc + t);
+    /// assert_eq!(sum, Matrix::zeros(2, 2));
+    /// ```
+    /// ## Errors
+    /// [`MatrixError::NotSquare`].
+    pub fn characteristic_polynomial(&self) -> Result<Vec<F>, MatrixError> {
+        if !self.is_square() {
+            return Err(MatrixError::NotSquare);
+        }
+        // p holds det(x I - A_r) for the top-left r x r block A_r, highest degree first.
+        let mut p = vec![F::ONE_ELEMENT];
+        for r in 0..self.rows {
+            // A_(r+1) = [[A_r, c], [s, a]] with column c = a[0..r][r], row s = a[r][0..r].
+            // Its polynomial is T * p, with T the Toeplitz matrix whose first column is
+            // t = [1, -a, -s c, -s A_r c, ..., -s A_r^(r-1) c].
+            let mut t = vec![F::ONE_ELEMENT, -self[(r, r)]];
+            let mut w: Vec<F> = (0..r).map(|i| self[(i, r)]).collect();
+            for _ in 0..r {
+                let s_w = (0..r).fold(F::ZERO_ELEMENT, |acc, j| acc + self[(r, j)] * w[j]);
+                t.push(-s_w);
+                w = (0..r)
+                    .map(|i| (0..r).fold(F::ZERO_ELEMENT, |acc, j| acc + self[(i, j)] * w[j]))
+                    .collect();
+            }
+            p = (0..r + 2)
+                .map(|i| (0..=i.min(r)).fold(F::ZERO_ELEMENT, |acc, j| acc + t[i - j] * p[j]))
+                .collect();
+        }
+        p.reverse();
+        Ok(p)
     }
 
     /// The LU decomposition `A = L * U` (Doolittle: `L` lower triangular with ones on its

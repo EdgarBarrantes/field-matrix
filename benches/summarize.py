@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CRITERION = ROOT / "target" / "criterion"
 ORDER = [
     "multiply", "determinant", "naive_determinant_leibniz", "inverse", "solve", "naive_solve_cramer",
-    "adjoint", "adjugate", "naive_adjugate", "pow_64", "naive_pow_64", "evaluate_matrix_polynomial",
+    "adjoint", "adjugate", "naive_adjugate", "pow_64", "naive_pow_64", "rank",
+    "characteristic_polynomial", "evaluate_matrix_polynomial",
 ]
 
 
