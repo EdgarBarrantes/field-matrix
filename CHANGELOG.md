@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
 
 Documentation only:
 - Every example in the docs is now compiled and checked by `cargo test`; the crate example was

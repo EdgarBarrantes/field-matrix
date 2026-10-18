@@ -1,6 +1,6 @@
 [package]
 name = "field-matrix-utils"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Edgar Barrantes <edgar@barrantes.dev>", "Isaac Villalobos <isaacvil@gmail.com>"]
 description = "Dense matrices over arkworks finite fields: determinant, inverse, adjugate, LU and linear systems"
