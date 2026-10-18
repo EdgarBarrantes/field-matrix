@@ -73,11 +73,21 @@ println!("{a}"); // [1, 2]
 - `scalar_mul`, `mul_vec` (A * v), `sum`, `transpose`, `get`, `set`
 - `determinant`, `inverse`, `adjugate`, `solve` (Gaussian elimination with row exchanges) and
   `lu_decomposition` (Doolittle, without row exchanges)
-- `is_square`, `is_diagonal`, `is_identity`
+- `pow` (square-and-multiply), `is_square`, `is_diagonal`, `is_identity`
 - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: `M_0 + alpha * M_1 + ... +
   alpha^k * M_k`, the random linear combination proof systems use to batch checks
 
-Methods that can fail return a [`MatrixError`]; the operators panic if the sizes don't fit.
+Methods that can fail return a `MatrixError`; the operators panic if the sizes don't fit.
+
+## Learning from it
+
+- `naive` computes the same operations straight from their definitions (the Leibniz formula,
+  cofactor expansion, the adjugate from cofactors, Cramer's rule...), next to the fast methods
+  on `Matrix`. Tests check that both always agree.
+- `counting` counts the field operations an algorithm does, independent of the machine:
+  wrap a matrix's entries and run the operation inside `counting::count`.
+  `cargo run --example operation_counts` prints a table of both versions by matrix size.
+- `cargo bench` measures the time; [benches/RESULTS.md](benches/RESULTS.md) keeps the results over time.
 
 ## Upgrading from 0.1
 

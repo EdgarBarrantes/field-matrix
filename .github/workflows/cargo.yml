@@ -16,6 +16,7 @@ jobs:
       - run: cargo test
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets
+      - run: cargo run --example operation_counts
       - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -Dwarnings

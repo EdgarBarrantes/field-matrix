@@ -3,14 +3,14 @@
 use core::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::fmt;
 
-use ark_ff::Field;
+use crate::scalar::Scalar;
 
 /// A dense `rows x columns` matrix over the field `F`, stored row by row in one `Vec`.
 ///
 /// Arithmetic operators (`+`, `-`, `*`, unary `-`) work on owned matrices and on references
 /// (`&a + &b`) and panic if the sizes don't fit. Methods that can fail return a [`MatrixError`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Matrix<F: Field> {
+pub struct Matrix<F: Scalar> {
     rows: usize,
     columns: usize,
     /// Row-major: the entry at `(i, j)` is `data[i * columns + j]`.
@@ -60,7 +60,7 @@ impl std::error::Error for MatrixError {}
 /// [ 1, 126]
 /// [30,   4]
 /// ```
-impl<F: Field> fmt::Display for Matrix<F> {
+impl<F: Scalar> fmt::Display for Matrix<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let cells: Vec<String> = self.data.iter().map(|x| x.to_string()).collect();
         let widths: Vec<usize> = (0..self.columns)
@@ -81,7 +81,7 @@ impl<F: Field> fmt::Display for Matrix<F> {
     }
 }
 
-impl<F: Field> Index<(usize, usize)> for Matrix<F> {
+impl<F: Scalar> Index<(usize, usize)> for Matrix<F> {
     type Output = F;
 
     /// The entry at row `i`, column `j`. Panics if it is outside the matrix; [`Matrix::get`]
@@ -92,14 +92,14 @@ impl<F: Field> Index<(usize, usize)> for Matrix<F> {
     }
 }
 
-impl<F: Field> IndexMut<(usize, usize)> for Matrix<F> {
+impl<F: Scalar> IndexMut<(usize, usize)> for Matrix<F> {
     fn index_mut(&mut self, (i, j): (usize, usize)) -> &mut F {
         assert!(i < self.rows && j < self.columns, "Index out of bounds");
         &mut self.data[i * self.columns + j]
     }
 }
 
-impl<F: Field> Add<&Matrix<F>> for &Matrix<F> {
+impl<F: Scalar> Add<&Matrix<F>> for &Matrix<F> {
     type Output = Matrix<F>;
 
     fn add(self, other: &Matrix<F>) -> Matrix<F> {
@@ -118,7 +118,7 @@ impl<F: Field> Add<&Matrix<F>> for &Matrix<F> {
     }
 }
 
-impl<F: Field> Sub<&Matrix<F>> for &Matrix<F> {
+impl<F: Scalar> Sub<&Matrix<F>> for &Matrix<F> {
     type Output = Matrix<F>;
 
     fn sub(self, other: &Matrix<F>) -> Matrix<F> {
@@ -137,7 +137,7 @@ impl<F: Field> Sub<&Matrix<F>> for &Matrix<F> {
     }
 }
 
-impl<F: Field> Mul<&Matrix<F>> for &Matrix<F> {
+impl<F: Scalar> Mul<&Matrix<F>> for &Matrix<F> {
     type Output = Matrix<F>;
 
     /// Schoolbook multiplication: `rows * other.columns * columns` field multiplications.
@@ -159,21 +159,21 @@ impl<F: Field> Mul<&Matrix<F>> for &Matrix<F> {
 /// The other three combinations of owned and borrowed operands, through the `&a op &b` one.
 macro_rules! forward_binary_op {
     ($trait:ident, $method:ident) => {
-        impl<F: Field> $trait<Matrix<F>> for Matrix<F> {
+        impl<F: Scalar> $trait<Matrix<F>> for Matrix<F> {
             type Output = Matrix<F>;
             fn $method(self, other: Matrix<F>) -> Matrix<F> {
                 (&self).$method(&other)
             }
         }
 
-        impl<F: Field> $trait<&Matrix<F>> for Matrix<F> {
+        impl<F: Scalar> $trait<&Matrix<F>> for Matrix<F> {
             type Output = Matrix<F>;
             fn $method(self, other: &Matrix<F>) -> Matrix<F> {
                 (&self).$method(other)
             }
         }
 
-        impl<F: Field> $trait<Matrix<F>> for &Matrix<F> {
+        impl<F: Scalar> $trait<Matrix<F>> for &Matrix<F> {
             type Output = Matrix<F>;
             fn $method(self, other: Matrix<F>) -> Matrix<F> {
                 self.$method(&other)
@@ -186,7 +186,7 @@ forward_binary_op!(Add, add);
 forward_binary_op!(Sub, sub);
 forward_binary_op!(Mul, mul);
 
-impl<F: Field> Neg for &Matrix<F> {
+impl<F: Scalar> Neg for &Matrix<F> {
     type Output = Matrix<F>;
 
     fn neg(self) -> Matrix<F> {
@@ -199,7 +199,7 @@ impl<F: Field> Neg for &Matrix<F> {
     }
 }
 
-impl<F: Field> Neg for Matrix<F> {
+impl<F: Scalar> Neg for Matrix<F> {
     type Output = Matrix<F>;
 
     fn neg(self) -> Matrix<F> {
@@ -207,7 +207,7 @@ impl<F: Field> Neg for Matrix<F> {
     }
 }
 
-impl<F: Field> Matrix<F> {
+impl<F: Scalar> Matrix<F> {
     /// Creates a `rows x columns` matrix from its entries, row by row.
     /// ## Example
     /// ```
@@ -274,13 +274,19 @@ impl<F: Field> Matrix<F> {
         Matrix {
             rows,
             columns,
-            data: vec![F::ZERO; rows * columns],
+            data: vec![F::ZERO_ELEMENT; rows * columns],
         }
     }
 
     /// The `n x n` identity matrix.
     pub fn identity(n: usize) -> Matrix<F> {
-        Matrix::from_fn(n, n, |i, j| if i == j { F::ONE } else { F::ZERO })
+        Matrix::from_fn(n, n, |i, j| {
+            if i == j {
+                F::ONE_ELEMENT
+            } else {
+                F::ZERO_ELEMENT
+            }
+        })
     }
 
     /// The `rows x columns` matrix whose entry `(i, j)` is `f(i, j)`.
@@ -395,7 +401,7 @@ impl<F: Field> Matrix<F> {
     /// assert!(d.is_diagonal());
     /// ```
     pub fn is_diagonal(&self) -> bool {
-        (0..self.rows).all(|i| (0..self.columns).all(|j| i == j || self[(i, j)] == F::ZERO))
+        (0..self.rows).all(|i| (0..self.columns).all(|j| i == j || self[(i, j)] == F::ZERO_ELEMENT))
     }
 
     /// Whether this is an identity matrix: square, ones on the diagonal, zeros elsewhere.
@@ -439,13 +445,13 @@ impl<F: Field> Matrix<F> {
             return Err(MatrixError::DimensionMismatch);
         }
         Ok((0..self.rows)
-            .map(|i| (0..self.columns).map(|j| self[(i, j)] * v[j]).sum())
+            .map(|i| (0..self.columns).fold(F::ZERO_ELEMENT, |acc, j| acc + self[(i, j)] * v[j]))
             .collect())
     }
 
     /// The sum of all entries.
     pub fn sum(&self) -> F {
-        self.data.iter().sum()
+        self.data.iter().fold(F::ZERO_ELEMENT, |acc, &x| acc + x)
     }
 
     /// The determinant, by Gaussian elimination: about n^3 / 3 field multiplications.
@@ -470,11 +476,11 @@ impl<F: Field> Matrix<F> {
         }
         let n = self.rows;
         let mut a = self.data.clone();
-        let mut det = F::ONE;
+        let mut det = F::ONE_ELEMENT;
 
         for i in 0..n {
-            let Some(pivot_row) = (i..n).find(|&r| a[r * n + i] != F::ZERO) else {
-                return Ok(F::ZERO);
+            let Some(pivot_row) = (i..n).find(|&r| a[r * n + i] != F::ZERO_ELEMENT) else {
+                return Ok(F::ZERO_ELEMENT);
             };
             if pivot_row != i {
                 for k in 0..n {
@@ -485,11 +491,11 @@ impl<F: Field> Matrix<F> {
 
             let pivot = a[i * n + i];
             det *= pivot;
-            let pivot_inverse = pivot.inverse().expect("pivot is not zero");
+            let pivot_inverse = pivot.invert().expect("pivot is not zero");
 
             for r in (i + 1)..n {
                 let factor = a[r * n + i] * pivot_inverse;
-                if factor != F::ZERO {
+                if factor != F::ZERO_ELEMENT {
                     for k in (i + 1)..n {
                         let value = a[i * n + k];
                         a[r * n + k] -= factor * value;
@@ -571,7 +577,7 @@ impl<F: Field> Matrix<F> {
 
         for i in 0..n {
             let pivot_row = (i..n)
-                .find(|&r| a[r * n + i] != F::ZERO)
+                .find(|&r| a[r * n + i] != F::ZERO_ELEMENT)
                 .ok_or(MatrixError::Singular)?;
             if pivot_row != i {
                 for c in 0..n {
@@ -582,7 +588,7 @@ impl<F: Field> Matrix<F> {
                 }
             }
 
-            let pivot_inverse = a[i * n + i].inverse().expect("pivot is not zero");
+            let pivot_inverse = a[i * n + i].invert().expect("pivot is not zero");
             for c in 0..n {
                 a[i * n + c] *= pivot_inverse;
             }
@@ -592,7 +598,7 @@ impl<F: Field> Matrix<F> {
 
             for r in (0..n).filter(|&r| r != i) {
                 let factor = a[r * n + i];
-                if factor != F::ZERO {
+                if factor != F::ZERO_ELEMENT {
                     for c in 0..n {
                         let value = a[i * n + c];
                         a[r * n + c] -= factor * value;
@@ -611,8 +617,14 @@ impl<F: Field> Matrix<F> {
     /// The adjugate (the transpose of the cofactor matrix), so that
     /// `a * a.adjugate() == det(a) * I`, also when `a` is singular.
     ///
-    /// Computed from its definition: n^2 cofactors, each the determinant of an
-    /// `(n - 1) x (n - 1)` minor, about n^5 / 3 field multiplications in all.
+    /// About n^3 field multiplications, without computing any cofactor matrix:
+    /// - invertible: `adj(A) = det(A) * A^-1`;
+    /// - rank n - 1: `adj(A)` has rank one, `c * x * y^T` with `A x = 0` and `y^T A = 0`; one
+    ///   cofactor gives `c`;
+    /// - lower rank: every cofactor is zero.
+    ///
+    /// [`naive::adjugate`](crate::naive::adjugate) computes it from the definition (n^2 cofactors,
+    /// about n^5 / 3 multiplications) for comparison.
     /// ## Example
     /// ```
     /// # use ark_ff::{Fp64, MontBackend};
@@ -638,22 +650,125 @@ impl<F: Field> Matrix<F> {
         if n == 1 {
             return Ok(Matrix::identity(1));
         }
-        let mut adjugate = Matrix::zeros(n, n);
-        for i in 0..n {
-            for j in 0..n {
-                let minor = Matrix::from_fn(n - 1, n - 1, |r, c| {
-                    self[(r + usize::from(r >= i), c + usize::from(c >= j))]
-                });
-                let cofactor = minor.determinant()?;
-                // Transposed: the cofactor of (i, j) goes to (j, i).
-                adjugate[(j, i)] = if (i + j) % 2 == 0 {
-                    cofactor
-                } else {
-                    -cofactor
-                };
+        match self.inverse() {
+            Ok(inverse) => return Ok(inverse.scalar_mul(self.determinant()?)),
+            Err(MatrixError::Singular) => {}
+            Err(e) => return Err(e),
+        }
+
+        let (rank, x) = self.rank_and_kernel_vector();
+        if rank + 1 < n {
+            return Ok(Matrix::zeros(n, n));
+        }
+        // Rank n - 1: the kernels of A and of A^T are lines, spanned by x and y.
+        let x = x.expect("rank n - 1 leaves a kernel");
+        let y = self
+            .transpose()
+            .rank_and_kernel_vector()
+            .1
+            .expect("A^T has the same rank");
+        let p = x
+            .iter()
+            .position(|&v| v != F::ZERO_ELEMENT)
+            .expect("x is not zero");
+        let q = y
+            .iter()
+            .position(|&v| v != F::ZERO_ELEMENT)
+            .expect("y is not zero");
+        // adj[p][q] is the cofactor of (q, p); it fixes the scale c of c * x * y^T.
+        let minor = self.minor(q, p).determinant()?;
+        let cofactor = if (p + q) % 2 == 0 { minor } else { -minor };
+        let c = cofactor * (x[p] * y[q]).invert().expect("x[p] and y[q] are not zero");
+        Ok(Matrix::from_fn(n, n, |i, j| c * x[i] * y[j]))
+    }
+
+    /// The matrix to the power `k`, by square-and-multiply: at most `2 * log2(k)` matrix
+    /// multiplications. [`naive::pow`](crate::naive::pow) multiplies `k - 1` times.
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// // [[1, 1], [1, 0]]^k holds Fibonacci numbers: F(11) = 89
+    /// let fib: Matrix<F> = Matrix::from_rows(vec![vec![F::from(1), F::from(1)], vec![F::from(1), F::from(0)]]).unwrap();
+    /// assert_eq!(fib.pow(10).unwrap()[(0, 0)], F::from(89));
+    /// assert!(fib.pow(0).unwrap().is_identity());
+    /// ```
+    /// ## Errors
+    /// [`MatrixError::NotSquare`].
+    pub fn pow(&self, mut k: u64) -> Result<Matrix<F>, MatrixError> {
+        if !self.is_square() {
+            return Err(MatrixError::NotSquare);
+        }
+        let mut result = Matrix::identity(self.rows);
+        let mut base = self.clone();
+        while k > 0 {
+            if k & 1 == 1 {
+                result = &result * &base;
+            }
+            k >>= 1;
+            if k > 0 {
+                base = &base * &base;
             }
         }
-        Ok(adjugate)
+        Ok(result)
+    }
+
+    /// The matrix without row `i` and column `j`.
+    pub(crate) fn minor(&self, i: usize, j: usize) -> Matrix<F> {
+        Matrix::from_fn(self.rows - 1, self.columns - 1, |r, c| {
+            self[(r + usize::from(r >= i), c + usize::from(c >= j))]
+        })
+    }
+
+    /// The rank, and a non-zero `x` with `A x = 0` if there is one, by reduction to row echelon
+    /// form.
+    pub(crate) fn rank_and_kernel_vector(&self) -> (usize, Option<Vec<F>>) {
+        let (rows, columns) = (self.rows, self.columns);
+        let mut a = self.data.clone();
+        let mut pivots = Vec::new();
+        for c in 0..columns {
+            let r = pivots.len();
+            if r == rows {
+                break;
+            }
+            let Some(p) = (r..rows).find(|&p| a[p * columns + c] != F::ZERO_ELEMENT) else {
+                continue;
+            };
+            for k in 0..columns {
+                a.swap(r * columns + k, p * columns + k);
+            }
+            let pivot_inverse = a[r * columns + c].invert().expect("pivot is not zero");
+            for k in 0..columns {
+                a[r * columns + k] *= pivot_inverse;
+            }
+            for other in (0..rows).filter(|&other| other != r) {
+                let factor = a[other * columns + c];
+                if factor != F::ZERO_ELEMENT {
+                    for k in 0..columns {
+                        let value = a[r * columns + k];
+                        a[other * columns + k] -= factor * value;
+                    }
+                }
+            }
+            pivots.push(c);
+        }
+
+        // A column without a pivot is free: set it to 1, and solve each pivot variable from its
+        // row of the reduced form.
+        let kernel = (0..columns).find(|c| !pivots.contains(c)).map(|free| {
+            let mut x = vec![F::ZERO_ELEMENT; columns];
+            x[free] = F::ONE_ELEMENT;
+            for (r, &pivot) in pivots.iter().enumerate() {
+                x[pivot] = -a[r * columns + free];
+            }
+            x
+        });
+        (pivots.len(), kernel)
     }
 
     /// The LU decomposition `A = L * U` (Doolittle: `L` lower triangular with ones on its
@@ -688,13 +803,13 @@ impl<F: Field> Matrix<F> {
 
         for i in 0..n {
             for j in i..n {
-                let sum: F = (0..i).map(|k| l[(i, k)] * u[(k, j)]).sum();
+                let sum = (0..i).fold(F::ZERO_ELEMENT, |acc, k| acc + l[(i, k)] * u[(k, j)]);
                 u[(i, j)] = self[(i, j)] - sum;
             }
             if i + 1 < n {
-                let pivot_inverse = u[(i, i)].inverse().ok_or(MatrixError::ZeroPivot)?;
+                let pivot_inverse = u[(i, i)].invert().ok_or(MatrixError::ZeroPivot)?;
                 for j in (i + 1)..n {
-                    let sum: F = (0..i).map(|k| l[(j, k)] * u[(k, i)]).sum();
+                    let sum = (0..i).fold(F::ZERO_ELEMENT, |acc, k| acc + l[(j, k)] * u[(k, i)]);
                     l[(j, i)] = (self[(j, i)] - sum) * pivot_inverse;
                 }
             }

@@ -13,7 +13,7 @@ use std::hint::black_box;
 
 use ark_ff::{Fp256, MontBackend};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use field_matrix_utils::{evaluate_matrix_polynomial, Matrix};
+use field_matrix_utils::{evaluate_matrix_polynomial, naive, Matrix};
 
 #[derive(ark_ff::MontConfig)]
 #[modulus = "52435875175126190479447740508185965837690552500527637822603658699938581184513"]
@@ -103,6 +103,52 @@ fn operations(c: &mut Criterion) {
             bench.iter(|| black_box(evaluate_matrix_polynomial(&coefficients, alpha)))
         });
     }
+    group.finish();
+
+    // Naive versions (from the definitions), next to their fast counterparts above. Added after
+    // the others, so the inputs of the earlier groups stay the same.
+
+    let mut group = c.benchmark_group("naive_adjugate");
+    group.sample_size(10);
+    for n in ADJUGATE_SIZES {
+        let a = rng.matrix(n);
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
+            bench.iter(|| black_box(naive::adjugate(&a)))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("naive_determinant_leibniz");
+    group.sample_size(10);
+    for n in [4, 8] {
+        let a = rng.matrix(n);
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
+            bench.iter(|| black_box(naive::determinant_leibniz(&a)))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("naive_solve_cramer");
+    for n in [4, 16] {
+        let a = rng.matrix(n);
+        let b: Vec<F> = (0..n).map(|_| rng.next()).collect();
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
+            bench.iter(|| black_box(naive::solve_cramer(&a, &b)))
+        });
+    }
+    group.finish();
+
+    let a = rng.matrix(16);
+    let mut group = c.benchmark_group("pow_64");
+    group.bench_with_input(BenchmarkId::from_parameter(16), &16, |bench, _| {
+        bench.iter(|| black_box(a.pow(64)))
+    });
+    group.finish();
+    let mut group = c.benchmark_group("naive_pow_64");
+    group.sample_size(10);
+    group.bench_with_input(BenchmarkId::from_parameter(16), &16, |bench, _| {
+        bench.iter(|| black_box(naive::pow(&a, 64)))
+    });
     group.finish();
 }
 

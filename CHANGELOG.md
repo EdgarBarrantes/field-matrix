@@ -39,6 +39,17 @@ Breaking:
 New:
 - `zeros`, `identity`, `from_fn`, `rows`, `columns`, `as_slice`, `to_rows`, indexing with
   `a[(i, j)]`, negation, and `MatrixError` (which implements `std::error::Error`).
+- `naive`: the operations computed from their definitions, to compare with the methods:
+  `determinant_leibniz`, `determinant_laplace`, `adjugate` (cofactors), `inverse` (adjugate /
+  determinant), `solve_cramer`, `pow`.
+- `counting`: `Counting<F>` counts the field operations done with it (`counting::count`), and
+  `cargo run --example operation_counts` prints naive against fast by matrix size.
+- `pow`, by square-and-multiply.
+- `adjugate` no longer computes n^2 cofactors (about n^5 work): det(A) * A^-1 when invertible, a
+  rank-one matrix from the kernels when the rank is n - 1, zero below. The cofactor version is
+  `naive::adjugate`.
+- The matrix code works with entries implementing `scalar::Scalar`, which every `ark_ff::Field`
+  does (and `Counting`); a `Matrix<F>` with `F: ark_ff::Field` works as before.
 
 Other:
 - Benchmarks (`cargo bench`, `benches/`) with recorded results in `benches/RESULTS.md`, so changes

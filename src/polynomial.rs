@@ -5,8 +5,7 @@
 //! challenge `alpha`. That is the polynomial `M_0 + M_1 x + ... + M_k x^k` evaluated at
 //! `x = alpha`, which these functions compute with Horner's rule (`k` scalar multiplications).
 
-use ark_ff::Field;
-
+use crate::scalar::Scalar;
 use crate::{Matrix, MatrixError};
 
 /// Evaluates `M_0 + M_1 x + ... + M_k x^k` at `x = alpha`, where `coefficients` is
@@ -32,7 +31,7 @@ use crate::{Matrix, MatrixError};
 /// ## Errors
 /// [`MatrixError::Empty`] if there are no coefficients; [`MatrixError::DimensionMismatch`] if the
 /// matrices don't all have the same size.
-pub fn evaluate_matrix_polynomial<F: Field>(
+pub fn evaluate_matrix_polynomial<F: Scalar>(
     coefficients: &[Matrix<F>],
     alpha: F,
 ) -> Result<Matrix<F>, MatrixError> {
@@ -71,7 +70,7 @@ pub fn evaluate_matrix_polynomial<F: Field>(
 /// ## Errors
 /// [`MatrixError::Empty`] if there are no coefficients; [`MatrixError::DimensionMismatch`] if the
 /// vectors don't all have the same length.
-pub fn evaluate_vector_polynomial<F: Field>(
+pub fn evaluate_vector_polynomial<F: Scalar>(
     coefficients: &[Vec<F>],
     alpha: F,
 ) -> Result<Vec<F>, MatrixError> {
@@ -87,7 +86,7 @@ pub fn evaluate_vector_polynomial<F: Field>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ff::{AdditiveGroup, Fp64, MontBackend};
+    use ark_ff::{AdditiveGroup, Field, Fp64, MontBackend};
 
     #[derive(ark_ff::MontConfig)]
     #[modulus = "127"]
