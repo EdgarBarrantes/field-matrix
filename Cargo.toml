@@ -2,6 +2,7 @@
 name = "field-matrix-utils"
 version = "0.1.4"
 edition = "2021"
+rust-version = "1.83"
 authors = ["Edgar Barrantes <edgar@barrantes.dev>", "Isaac Villalobos <isaacvil@gmail.com>"]
 description = "Dense matrices over arkworks finite fields: determinant, inverse, adjugate, LU and linear systems"
 repository = "https://github.com/EdgarBarrantes/field-matrix"

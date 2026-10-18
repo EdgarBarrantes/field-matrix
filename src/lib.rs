@@ -18,8 +18,8 @@
 //!
 //! - Production or secret data: it is not constant time (it branches on the values) and it has
 //!   not been audited.
-//! - Large or sparse matrices: operations are O(n^3) and written for clarity (the adjugate is
-//!   O(n^5)); see `benches/RESULTS.md` for timings.
+//! - Large or sparse matrices: dense storage, operations of about n^3 (the characteristic
+//!   polynomial n^4) written for clarity, and no parallelism; see `benches/RESULTS.md` for timings.
 //! - Matrices over GF(2): [bitgauss](https://crates.io/crates/bitgauss) is much faster there. In
 //!   Python, [galois](https://github.com/mhostetter/galois) and SageMath do all of this and more.
 //!
@@ -85,6 +85,10 @@
 //!   wrap a matrix's entries and run the operation inside `counting::count`.
 //!   `cargo run --example operation_counts` prints a table of both versions by matrix size.
 //! - `cargo bench` measures the time; `benches/RESULTS.md` keeps the results over time.
+//! - Worked examples in `examples/`, each runnable with `cargo run --example <name>`:
+//!   `shamir` (secret sharing by interpolation), `reed_solomon` (recovering lost symbols, detecting
+//!   a changed one), `r1cs` (checking a zero-knowledge constraint system, and batching its checks),
+//!   `hill_cipher` (a matrix cipher, and breaking it with an inverse).
 //!
 //! ## Upgrading from 0.1
 //!

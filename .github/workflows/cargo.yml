@@ -16,7 +16,23 @@ jobs:
       - run: cargo test
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets
-      - run: cargo run --example operation_counts
+      - name: Run the examples
+        run: for example in examples/*.rs; do cargo run --example "$(basename "$example" .rs)"; done
       - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -Dwarnings
+
+  msrv:
+    # The oldest Rust the library builds on (rust-version in Cargo.toml). Dependencies are
+    # resolved for that version first, as Cargo does when it honours rust-version; tests and
+    # benchmarks need newer Rust (criterion), only the library is checked.
+    name: Minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo generate-lockfile
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+      - uses: dtolnay/rust-toolchain@1.83
+      - run: cargo check --lib --locked

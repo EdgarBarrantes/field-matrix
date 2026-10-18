@@ -3,6 +3,8 @@
 ## Unreleased (0.2.0)
 
 Breaking:
+- Rust 1.83 or newer (`rust-version` in `Cargo.toml`, checked in CI): what ark-ff 0.6 really needs,
+  though it declares 1.75.
 - ark-ff 0.6 (was 0.4): use field types from ark-ff 0.6. In ark-ff 0.5 and later, `ZERO` comes
   from the `AdditiveGroup` trait, so code using `F::ZERO` on a concrete field type needs
   `use ark_ff::AdditiveGroup`.
@@ -52,6 +54,8 @@ New:
   in small fields where Faddeev-LeVerrier would divide by zero).
 - `Matrix::vandermonde`, `polynomial::interpolate` (the polynomial through given points) and
   `polynomial::evaluate_polynomial`.
+- Worked examples (`cargo run --example <name>`): `shamir`, `reed_solomon`, `r1cs`, `hill_cipher`,
+  and `operation_counts`.
 - `adjugate` no longer computes n^2 cofactors (about n^5 work): det(A) * A^-1 when invertible, a
   rank-one matrix from the kernels when the rank is n - 1, zero below. The cofactor version is
   `naive::adjugate`.
