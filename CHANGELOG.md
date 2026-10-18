@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4
 
 - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: evaluate a polynomial whose
   coefficients are matrices or vectors at a point (`M_0 + alpha * M_1 + ... + alpha^k * M_k`), as
