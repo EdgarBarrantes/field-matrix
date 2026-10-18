@@ -19,3 +19,19 @@ To compare a change with the previous run directly, criterion keeps the last res
 `target/criterion`: `cargo bench -- --save-baseline before`, change the code, then
 `cargo bench -- --baseline before` reports the difference for each benchmark.
 
+## 2026-10-18: 9a613db Benchmarks
+
+rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H. Median time per operation.
+
+| Operation | n = 4 | n = 8 | n = 16 | n = 64 |
+|---|---|---|---|---|
+| multiply | 1.11 µs |  | 71.3 µs | 5.72 ms |
+| determinant | 9.66 µs |  | 229 µs | 5.17 ms |
+| inverse | 8.12 µs |  | 190 µs | 10.2 ms |
+| solve | 7.41 µs |  | 115 µs | 5.2 ms |
+| adjoint | 84.5 µs | 2.83 ms | 56.7 ms |  |
+| evaluate_matrix_polynomial | 3.55 µs |  | 43.6 µs | 797 µs |
+
+First recorded run: the 0.1 code as it is, on ark-ff 0.6. The baseline for the 0.2.0 changes. (0.1.4,
+on ark-ff 0.4, can still be measured from its tag.)
+
