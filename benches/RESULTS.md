@@ -23,6 +23,33 @@ To compare a change with the previous run directly, criterion keeps the last res
 `cargo bench -- --baseline before` reports the difference for each benchmark (pass the same
 options to `benches/run.sh`).
 
+## 2026-10-18: 9541232 Rank, kernel, all solutions, trace, characteristic polynomial, interpolation
+
+rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H; pinned to CPUs 1-2, governor performance, 97% idle before, other cores 97% idle during (ok). Median time per
+operation.
+
+| Operation | n = 4 | n = 8 | n = 16 | n = 64 |
+|---|---|---|---|---|
+| multiply | 1.05 µs |  | 63.6 µs | 5.43 ms |
+| determinant | 6.25 µs |  | 47.4 µs | 2.09 ms |
+| naive_determinant_leibniz | 1.41 µs | 5.01 ms |  |  |
+| inverse | 7.72 µs |  | 173 µs | 9.63 ms |
+| solve | 6.9 µs |  | 102 µs | 5 ms |
+| naive_solve_cramer | 34 µs |  | 1.36 ms |  |
+| adjugate | 14.5 µs | 42.3 µs | 241 µs |  |
+| naive_adjugate | 113 µs | 1.56 ms | 19.2 ms |  |
+| pow_64 |  |  | 548 µs |  |
+| naive_pow_64 |  |  | 5.51 ms |  |
+| rank | 6.43 µs |  | 64 µs | 2.95 ms |
+| characteristic_polynomial | 1.71 µs |  | 305 µs | 85.1 ms |
+| evaluate_matrix_polynomial | 2.34 µs |  | 36.4 µs | 623 µs |
+
+New: `rank` costs about what `determinant` does (both one elimination). `characteristic_polynomial`
+(Berkowitz, about n^4) beats the determinant at n = 4, as it never inverts, and is 40 times slower
+at n = 64. The operations step 5 didn't change match the 6aa27d6 run within about 1%, except the
+determinant at n = 16, 9% faster with the same code: run-to-run variation, even pinned, so the
++3.6% noted for it at 6aa27d6 is probably the same.
+
 ## 2026-10-18: 6aa27d6 Naive versions, operation counting, fast adjugate, pow
 
 rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H; pinned to CPUs 1-2, governor performance, 97% idle before, other cores 97% idle during (ok). Median time per
