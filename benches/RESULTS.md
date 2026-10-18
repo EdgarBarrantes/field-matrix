@@ -23,6 +23,33 @@ To compare a change with the previous run directly, criterion keeps the last res
 `cargo bench -- --baseline before` reports the difference for each benchmark (pass the same
 options to `benches/run.sh`).
 
+## 2026-10-18: ee78a7f, same code, Rust 1.99.1 (was 1.91.1)
+
+rustc 1.99.1 (58cf8f9c3 2026-10-13), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H; pinned to CPUs 1-2, governor performance, 95% idle before, other cores 96% idle during (ok). Median time per
+operation.
+
+| Operation | n = 4 | n = 8 | n = 16 | n = 64 |
+|---|---|---|---|---|
+| multiply | 1.07 µs |  | 64.9 µs | 5.7 ms |
+| determinant | 6.98 µs |  | 57.2 µs | 2.01 ms |
+| naive_determinant_leibniz | 1.49 µs | 5.29 ms |  |  |
+| inverse | 8.43 µs |  | 182 µs | 9.81 ms |
+| solve | 7.64 µs |  | 108 µs | 5.14 ms |
+| naive_solve_cramer | 41.8 µs |  | 1.41 ms |  |
+| adjugate | 15.8 µs | 45.2 µs | 249 µs |  |
+| naive_adjugate | 127 µs | 1.64 ms | 19.8 ms |  |
+| pow_64 |  |  | 557 µs |  |
+| naive_pow_64 |  |  | 5.68 ms |  |
+| rank | 7.14 µs |  | 78.9 µs | 3.01 ms |
+| characteristic_polynomial | 1.63 µs |  | 322 µs | 86.7 ms |
+| evaluate_matrix_polynomial | 2.33 µs |  | 36.3 µs | 620 µs |
+
+Only the compiler changed (1.91.1 to 1.99.1) against the ee78a7f run above it. Mostly slower:
+elimination-based operations (determinant, inverse, solve, rank) about 10% at n = 4, 4 to 23% at
+n = 16 (rank 23%, determinant 20%, the noisy one) and 2 to 5% at n = 64 (determinant 4% faster);
+multiply 2 to 5%; polynomial evaluation and `pow` unchanged. Consistent in direction and the run
+was clean, so a compiler effect, not noise; nothing to fix in the crate.
+
 ## 2026-10-18: 9541232 Rank, kernel, all solutions, trace, characteristic polynomial, interpolation
 
 rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H; pinned to CPUs 1-2, governor performance, 97% idle before, other cores 97% idle during (ok). Median time per

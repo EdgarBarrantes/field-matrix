@@ -23,7 +23,8 @@ type F = Fp256<MontBackend<FrConfig, 4>>;
 
 /// Matrix sizes (n x n) for most operations.
 const SIZES: [usize; 3] = [4, 16, 64];
-/// The adjugate by cofactors costs about n^5: n = 64 would take minutes per iteration.
+/// Sizes for the adjugate, fast and naive: the naive one (cofactors) costs about n^5, so n = 64
+/// would take minutes per iteration.
 const ADJUGATE_SIZES: [usize; 3] = [4, 8, 16];
 /// Number of coefficients for the polynomial evaluation.
 const POLYNOMIAL_TERMS: usize = 8;
