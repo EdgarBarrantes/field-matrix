@@ -19,6 +19,27 @@ To compare a change with the previous run directly, criterion keeps the last res
 `target/criterion`: `cargo bench -- --save-baseline before`, change the code, then
 `cargo bench -- --baseline before` reports the difference for each benchmark.
 
+## 2026-10-18: 45470c2 0.2 API: flat storage, &self, Result errors, new names
+
+rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H. Median time per operation.
+
+| Operation | n = 4 | n = 8 | n = 16 | n = 64 |
+|---|---|---|---|---|
+| multiply | 990 ns |  | 63.7 µs | 5.64 ms |
+| determinant | 6.51 µs |  | 51.1 µs | 2.15 ms |
+| inverse | 7.88 µs |  | 173 µs | 9.95 ms |
+| solve | 7.2 µs |  | 99.2 µs | 5.28 ms |
+| adjugate | 117 µs | 1.64 ms | 19.8 ms |  |
+| evaluate_matrix_polynomial | 2.69 µs |  | 35 µs | 617 µs |
+
+The 0.2 API (flat storage, `&self`, `Result`), against the first run: multiply 2 to 14% faster,
+determinant 33 to 78% faster (it now inverts each pivot once instead of dividing once per row),
+inverse 2 to 9% and solve up to 14% faster (n = 64 unchanged), polynomial evaluation 20 to 25%
+faster. The adjugate, renamed from `adjoint`, is 2.8 times faster at n = 16 but slower at n = 4
+(117 against 85 µs), not explained yet; step 4 adds a fast adjugate, and the operation counts
+should show where the time goes.
+Measured after hades went idle (an earlier run during a Paperless import was off by up to 3x).
+
 ## 2026-10-18: 9a613db Benchmarks
 
 rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H. Median time per operation.
