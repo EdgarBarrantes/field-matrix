@@ -21,7 +21,7 @@ don't fit: their inverse and LU need real or complex numbers.
 - Learning and prototyping: courses, exercises and toy versions of schemes that need small
   dense linear algebra over a prime field (secret sharing, erasure codes, R1CS by hand).
 - Anyone who wants to see how linear algebra algorithms work and what they cost: textbook and
-  fast versions side by side, with operation counts and timings.
+  fast versions side by side, with operation counts and how long each takes.
 - Code that already uses arkworks 0.6 field types and needs a determinant, inverse or solve
   without writing Gaussian elimination again.
 
@@ -30,7 +30,7 @@ don't fit: their inverse and LU need real or complex numbers.
 - Production or secret data: it is not constant time (it branches on the values) and it has
   not been audited.
 - Large or sparse matrices: dense storage, operations of about n^3 (the characteristic
-  polynomial n^4) written for clarity, and no parallelism; see [benches/RESULTS.md](benches/RESULTS.md) for timings.
+  polynomial n^4) written for clarity, and no parallelism.
 - Matrices over GF(2): [bitgauss](https://crates.io/crates/bitgauss) is much faster there. In
   Python, [galois](https://github.com/mhostetter/galois) and SageMath do all of this and more.
 
@@ -95,7 +95,7 @@ Methods that can fail return a `MatrixError`; the operators panic if the sizes d
 - `counting` counts the field operations an algorithm does, independent of the machine:
   wrap a matrix's entries and run the operation inside `counting::count`.
   `cargo run --example operation_counts` prints a table of both versions by matrix size.
-- `cargo bench` measures the time; [benches/RESULTS.md](benches/RESULTS.md) keeps the results over time.
+- [benches/RESULTS.md](benches/RESULTS.md) compares how long the naive and the fast versions take (`cargo bench`).
 - Worked examples in [`examples/`](examples), each runnable with `cargo run --example <name>`:
   `shamir` (secret sharing by interpolation), `reed_solomon` (recovering lost symbols, detecting
   a changed one), `r1cs` (checking a zero-knowledge constraint system, and batching its checks),
@@ -130,9 +130,9 @@ by its definition on random matrices over GF(7) and GF(127), small enough for ma
 counterpart, and pinned operation counts) and `tests/algebra.rs` (row reduction, kernel, all
 solutions, Cayley-Hamilton, interpolation).
 
-`benches/run.sh` runs the benchmarks under the same conditions every time (an idle machine, one
-performance core); [benches/RESULTS.md](benches/RESULTS.md) keeps the results over time and says
-how to add a run.
+`benches/run.sh` runs the benchmarks (naive against fast for each operation) under the same
+conditions every time, an idle machine and one performance core; `python3 benches/summarize.py >
+benches/RESULTS.md` writes the comparison.
 
 ## License
 

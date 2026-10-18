@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-"""Print the latest `cargo bench` results as a Markdown section for benches/RESULTS.md.
+"""Writes benches/RESULTS.md: each operation's naive version against the fast one.
 
     benches/run.sh
-    python3 benches/summarize.py   # prints a section for benches/RESULTS.md
+    python3 benches/summarize.py > benches/RESULTS.md
 
-`python3 benches/summarize.py <baseline>` prints a saved criterion baseline instead of the latest
-run (the heading then names the current commit: edit it to the baseline's).
-
-Reads criterion's estimates (median time per operation) from target/criterion and adds what the
-numbers depend on: commit, Rust and ark-ff versions, and the CPU.
+Reads criterion's median time per run from target/criterion.
 """
 import datetime
 import json
-import sys
 import platform
 import re
 import subprocess
@@ -20,10 +15,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CRITERION = ROOT / "target" / "criterion"
-ORDER = [
-    "multiply", "determinant", "naive_determinant_leibniz", "inverse", "solve", "naive_solve_cramer",
-    "adjoint", "adjugate", "naive_adjugate", "pow_64", "naive_pow_64", "rank",
-    "characteristic_polynomial", "evaluate_matrix_polynomial",
+
+# Benchmark group, operation, and what the naive and the fast versions do.
+OPERATIONS = [
+    ("determinant_leibniz", "Determinant", "Leibniz formula (all permutations)", "elimination"),
+    ("determinant_laplace", "Determinant", "cofactor expansion", "elimination"),
+    ("adjugate", "Adjugate", "cofactors", "det(A) * A^-1 (kernels if singular)"),
+    ("inverse", "Inverse", "adjugate / det(A)", "Gauss-Jordan elimination"),
+    ("solve", "Solve A x = b", "Cramer's rule", "Gauss-Jordan elimination"),
+    ("pow", "A^64", "64 multiplications", "square-and-multiply"),
 ]
 
 
@@ -44,12 +44,6 @@ def cpu():
     return platform.processor() or "unknown"
 
 
-def ark_ff_version():
-    lock = (ROOT / "Cargo.lock").read_text()
-    match = re.search(r'name = "ark-ff"\nversion = "([^"]+)"', lock)
-    return match.group(1) if match else "unknown"
-
-
 def human(ns):
     for unit, size in (("s", 1e9), ("ms", 1e6), ("µs", 1e3)):
         if ns >= size:
@@ -57,31 +51,53 @@ def human(ns):
     return f"{ns:.3g} ns"
 
 
-def main():
-    baseline = sys.argv[1] if len(sys.argv) > 1 else "new"
-    results = {}
-    for estimates in CRITERION.glob(f"*/*/{baseline}/estimates.json"):
-        group, size = estimates.parts[-4], estimates.parts[-3]
-        if size.isdigit():
-            median = json.loads(estimates.read_text())["median"]["point_estimate"]
-            results.setdefault(group, {})[int(size)] = median
-    if not results:
-        raise SystemExit("No results in target/criterion: run `cargo bench` first.")
+def median(group, version, n):
+    estimates = CRITERION / group / version / str(n) / "new" / "estimates.json"
+    if not estimates.exists():
+        return None
+    return json.loads(estimates.read_text())["median"]["point_estimate"]
 
-    sizes = sorted({n for by_size in results.values() for n in by_size})
-    commit = run("git", "log", "-1", "--format=%h %s")
-    dirty = " (with uncommitted changes)" if run("git", "status", "--porcelain") else ""
-    print(f"## {datetime.date.today()}: {commit}{dirty}\n")
+
+def ratio(naive, fast):
+    if naive >= fast:
+        return f"{naive / fast:,.0f}x faster" if naive / fast >= 10 else f"{naive / fast:.1f}x faster"
+    return f"{fast / naive:.1f}x slower"
+
+
+def main():
+    rows = []
+    for group, name, naive_how, fast_how in OPERATIONS:
+        sizes = sorted(int(p.name) for p in (CRITERION / group / "fast").glob("*") if p.name.isdigit())
+        for n in sizes:
+            naive, fast = median(group, "naive", n), median(group, "fast", n)
+            if naive is not None and fast is not None:
+                rows.append(
+                    f"| {name} | {naive_how} | {fast_how} | {n} | {human(naive)} | {human(fast)} "
+                    f"| {ratio(naive, fast)} |"
+                )
+    if not rows:
+        raise SystemExit("No results in target/criterion: run benches/run.sh first.")
+
     conditions = CRITERION / "conditions.txt"
     how = conditions.read_text().strip() if conditions.exists() else "run without benches/run.sh"
-    print(f"{run('rustc', '--version')}, ark-ff {ark_ff_version()}, {cpu()}; {how}. Median time per")
-    print("operation.\n")
-    print("| Operation | " + " | ".join(f"n = {n}" for n in sizes) + " |")
-    print("|---|" + "---|" * len(sizes))
-    for group in sorted(results, key=lambda g: (ORDER.index(g) if g in ORDER else len(ORDER), g)):
-        cells = [human(results[group][n]) if n in results[group] else "" for n in sizes]
-        print(f"| {group} | " + " | ".join(cells) + " |")
-    print()
+    version = re.search(r'^version = "([^"]+)"', (ROOT / "Cargo.toml").read_text(), re.M).group(1)
+    rustc = run("rustc", "--version").split(" (")[0]
+    print(f"""# Naive against fast
+
+How long each operation takes when computed from its definition (the `naive` module) and with the
+method on `Matrix`, on the same n x n matrices over a 255-bit field (BLS12-381's scalar field).
+Median time per operation.
+
+| Operation | Naive version | Fast version | n | Naive | Fast | Fast is |
+|---|---|---|---|---|---|---|
+{chr(10).join(rows)}
+
+At small sizes the naive version can win: a field inversion costs as much as dozens of
+multiplications, and the definitions need few or none. `cargo run --example operation_counts`
+shows the operation counts behind these numbers.
+
+Measured {datetime.date.today()}, field-matrix-utils {version}, {rustc}, {cpu()}; {how}.\nTo measure again:
+`benches/run.sh`, then `python3 benches/summarize.py > benches/RESULTS.md`.""")
 
 
 if __name__ == "__main__":

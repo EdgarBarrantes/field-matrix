@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Benchmarks compare each operation's naive version with the fast one on the same matrices, and
+  `benches/RESULTS.md` is that comparison (the dated runs before it are in the git history).
+
 ## 0.2.0
 
 A new API (borrowed, with errors instead of panics), ark-ff 0.6, more linear algebra, and the

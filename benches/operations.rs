@@ -1,9 +1,9 @@
-//! Benchmarks of the main operations, over the BLS12-381 scalar field (255 bits, a common choice in
-//! zero-knowledge proofs). Run with `cargo bench`; see `benches/RESULTS.md` for recorded results.
+//! Each operation computed from its definition (`naive`) and with the method on `Matrix`, on the
+//! same matrices, over the BLS12-381 scalar field (255 bits, a common choice in zero-knowledge
+//! proofs). `benches/run.sh` then `python3 benches/summarize.py > benches/RESULTS.md` writes the
+//! comparison.
 //!
-//! Inputs are fixed pseudo-random matrices, so every run measures the same work. Operations take
-//! `&self`, so a copy an operation makes for itself (determinant and inverse eliminate on a copy)
-//! is part of what is measured, as it is for users.
+//! Inputs are fixed pseudo-random matrices, so every run measures the same work.
 
 // ark-ff's MontConfig derive checks for an `asm` feature on fields of four or more limbs, which this
 // crate doesn't define.
@@ -13,21 +13,13 @@ use std::hint::black_box;
 
 use ark_ff::{Fp256, MontBackend};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use field_matrix_utils::{evaluate_matrix_polynomial, naive, Matrix};
+use field_matrix_utils::{naive, Matrix};
 
 #[derive(ark_ff::MontConfig)]
 #[modulus = "52435875175126190479447740508185965837690552500527637822603658699938581184513"]
 #[generator = "7"]
 pub struct FrConfig;
 type F = Fp256<MontBackend<FrConfig, 4>>;
-
-/// Matrix sizes (n x n) for most operations.
-const SIZES: [usize; 3] = [4, 16, 64];
-/// Sizes for the adjugate, fast and naive: the naive one (cofactors) costs about n^5, so n = 64
-/// would take minutes per iteration.
-const ADJUGATE_SIZES: [usize; 3] = [4, 8, 16];
-/// Number of coefficients for the polynomial evaluation.
-const POLYNOMIAL_TERMS: usize = 8;
 
 /// Small deterministic generator, so every run benchmarks the same matrices.
 struct Rng(u64);
@@ -46,129 +38,82 @@ impl Rng {
     }
 }
 
+/// Benchmarks `naive` and `fast` on the same matrix for each size, in one group.
+fn compare<R>(
+    c: &mut Criterion,
+    rng: &mut Rng,
+    name: &str,
+    sizes: &[usize],
+    naive: impl Fn(&Matrix<F>, &[F]) -> R,
+    fast: impl Fn(&Matrix<F>, &[F]) -> R,
+) {
+    let mut group = c.benchmark_group(name);
+    group.sample_size(10);
+    for &n in sizes {
+        let a = rng.matrix(n);
+        let b: Vec<F> = (0..n).map(|_| rng.next()).collect();
+        group.bench_with_input(BenchmarkId::new("naive", n), &n, |bench, _| {
+            bench.iter(|| black_box(naive(&a, &b)))
+        });
+        group.bench_with_input(BenchmarkId::new("fast", n), &n, |bench, _| {
+            bench.iter(|| black_box(fast(&a, &b)))
+        });
+    }
+    group.finish();
+}
+
 fn operations(c: &mut Criterion) {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
 
-    let mut group = c.benchmark_group("multiply");
-    for n in SIZES {
-        let (a, b) = (rng.matrix(n), rng.matrix(n));
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(&a * &b))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("determinant");
-    for n in SIZES {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(a.determinant()))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("inverse");
-    for n in SIZES {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(a.inverse()))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("solve");
-    for n in SIZES {
-        let a = rng.matrix(n);
-        let b: Vec<F> = (0..n).map(|_| rng.next()).collect();
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(a.solve(&b)))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("adjugate");
-    group.sample_size(10);
-    for n in ADJUGATE_SIZES {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(a.adjugate()))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("evaluate_matrix_polynomial");
-    for n in SIZES {
-        let coefficients: Vec<Matrix<F>> = (0..POLYNOMIAL_TERMS).map(|_| rng.matrix(n)).collect();
-        let alpha = rng.next();
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(evaluate_matrix_polynomial(&coefficients, alpha)))
-        });
-    }
-    group.finish();
-
-    // Naive versions (from the definitions), next to their fast counterparts above. Added after
-    // the others, so the inputs of the earlier groups stay the same.
-
-    let mut group = c.benchmark_group("naive_adjugate");
-    group.sample_size(10);
-    for n in ADJUGATE_SIZES {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(naive::adjugate(&a)))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("naive_determinant_leibniz");
-    group.sample_size(10);
-    for n in [4, 8] {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(naive::determinant_leibniz(&a)))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("naive_solve_cramer");
-    for n in [4, 16] {
-        let a = rng.matrix(n);
-        let b: Vec<F> = (0..n).map(|_| rng.next()).collect();
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(naive::solve_cramer(&a, &b)))
-        });
-    }
-    group.finish();
-
-    let a = rng.matrix(16);
-    let mut group = c.benchmark_group("pow_64");
-    group.bench_with_input(BenchmarkId::from_parameter(16), &16, |bench, _| {
-        bench.iter(|| black_box(a.pow(64)))
-    });
-    group.finish();
-    let mut group = c.benchmark_group("naive_pow_64");
-    group.sample_size(10);
-    group.bench_with_input(BenchmarkId::from_parameter(16), &16, |bench, _| {
-        bench.iter(|| black_box(naive::pow(&a, 64)))
-    });
-    group.finish();
-
-    let mut group = c.benchmark_group("characteristic_polynomial");
-    for n in SIZES {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(a.characteristic_polynomial()))
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("rank");
-    for n in SIZES {
-        let a = rng.matrix(n);
-        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
-            bench.iter(|| black_box(a.rank()))
-        });
-    }
-    group.finish();
+    // Sizes stay where the naive version finishes in well under a second.
+    compare(
+        c,
+        &mut rng,
+        "determinant_leibniz",
+        &[4, 6, 8],
+        |a, _| naive::determinant_leibniz(a),
+        |a, _| a.determinant(),
+    );
+    compare(
+        c,
+        &mut rng,
+        "determinant_laplace",
+        &[4, 6, 8],
+        |a, _| naive::determinant_laplace(a),
+        |a, _| a.determinant(),
+    );
+    compare(
+        c,
+        &mut rng,
+        "adjugate",
+        &[4, 8, 16],
+        |a, _| naive::adjugate(a),
+        |a, _| a.adjugate(),
+    );
+    compare(
+        c,
+        &mut rng,
+        "inverse",
+        &[4, 8, 16],
+        |a, _| naive::inverse(a),
+        |a, _| a.inverse(),
+    );
+    compare(
+        c,
+        &mut rng,
+        "solve",
+        &[4, 16, 64],
+        naive::solve_cramer,
+        |a, b| a.solve(b),
+    );
+    compare(
+        c,
+        &mut rng,
+        "pow",
+        &[4, 16],
+        |a, _| naive::pow(a, 64),
+        |a, _| a.pow(64),
+    );
 }
 
 criterion_group!(benches, operations);
