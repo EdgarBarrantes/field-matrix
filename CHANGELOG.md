@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased (0.2.0)
+## 0.2.0
+
+A new API (borrowed, with errors instead of panics), ark-ff 0.6, more linear algebra, and the
+parts for learning: each main operation also computed from its definition, operation counting,
+benchmarks and worked examples. Upgrading from 0.1: see the table below.
 
 Breaking:
 - Rust 1.83 or newer (`rust-version` in `Cargo.toml`, checked in CI): what ark-ff 0.6 really needs,
@@ -52,19 +56,26 @@ New:
   plus the kernel.
 - `trace` and `characteristic_polynomial` (Berkowitz's algorithm, which never divides, so it works
   in small fields where Faddeev-LeVerrier would divide by zero).
-- `Matrix::vandermonde`, `polynomial::interpolate` (the polynomial through given points) and
-  `polynomial::evaluate_polynomial`.
+- `Matrix::vandermonde`, `interpolate` (the polynomial through given points) and
+  `evaluate_polynomial`, in `polynomial` and at the crate root.
 - Worked examples (`cargo run --example <name>`): `shamir`, `reed_solomon`, `r1cs`, `hill_cipher`,
   and `operation_counts`.
+
+Changed:
 - `adjugate` no longer computes n^2 cofactors (about n^5 work): det(A) * A^-1 when invertible, a
-  rank-one matrix from the kernels when the rank is n - 1, zero below. The cofactor version is
-  `naive::adjugate`.
+  rank-one matrix from the kernels when the rank is n - 1, zero below; 80 times faster at n = 16.
+  The cofactor version is `naive::adjugate`.
+- `determinant` inverts each pivot once instead of dividing once per row: 33 to 78% faster.
 - The matrix code works with entries implementing `scalar::Scalar`, which every `ark_ff::Field`
   does (and `Counting`); a `Matrix<F>` with `F: ark_ff::Field` works as before.
 
 Other:
-- Benchmarks (`cargo bench`, `benches/`) with recorded results in `benches/RESULTS.md`, so changes
-  in speed are visible over time.
+- Benchmarks (`cargo bench`; `benches/run.sh` for comparable runs: an idle machine, one
+  performance core) with recorded results in `benches/RESULTS.md`, so changes in speed are
+  visible over time.
+- Tests: `tests/naive.rs` (naive against fast, pinned operation counts) and `tests/algebra.rs` (row
+  reduction, kernel, solutions, Cayley-Hamilton, interpolation), over GF(7) and GF(127).
+- CI also builds the library on Rust 1.83 and runs every example.
 
 ## 0.1.4
 

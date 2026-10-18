@@ -5,9 +5,11 @@
 [![Tests](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml/badge.svg)](https://github.com/EdgarBarrantes/field-matrix/actions/workflows/cargo.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/field-matrix-utils.svg)](#license)
 
-Dense matrices over finite fields, for Rust: arithmetic, determinant, inverse, adjugate, LU
-decomposition and linear systems (Ax = b), with any [arkworks](https://arkworks.rs) field
-(`ark_ff::Field`, ark-ff 0.6) as the element type.
+Dense matrices over finite fields, for Rust and for learning: determinant, inverse, linear
+systems, rank, kernel, characteristic polynomial and more, with any
+[arkworks](https://arkworks.rs) field (`ark_ff::Field`, ark-ff 0.6) as the element type. The main
+operations also come computed straight from their definitions, to compare with the fast ones,
+and the field operations an algorithm does can be counted.
 
 Exact arithmetic modulo a prime has no rounding, so a matrix inverse or a solved system is
 exactly right or the matrix is singular. That is what you need for exercises in cryptography,
@@ -18,6 +20,8 @@ don't fit: their inverse and LU need real or complex numbers.
 
 - Learning and prototyping: courses, exercises and toy versions of schemes that need small
   dense linear algebra over a prime field (secret sharing, erasure codes, R1CS by hand).
+- Anyone who wants to see how linear algebra algorithms work and what they cost: textbook and
+  fast versions side by side, with operation counts and timings.
 - Code that already uses arkworks 0.6 field types and needs a determinant, inverse or solve
   without writing Gaussian elimination again.
 
@@ -78,7 +82,8 @@ println!("{a}"); // [1, 2]
 - `pow` (square-and-multiply), `is_square`, `is_diagonal`, `is_identity`
 - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: `M_0 + alpha * M_1 + ... +
   alpha^k * M_k`, the random linear combination proof systems use to batch checks
-- `Matrix::vandermonde`, `polynomial::interpolate` and `polynomial::evaluate_polynomial`
+- `Matrix::vandermonde`, `interpolate` (the polynomial through given points) and
+  `evaluate_polynomial`
 
 Methods that can fail return a `MatrixError`; the operators panic if the sizes don't fit.
 
@@ -114,14 +119,20 @@ field-matrix-utils = "0.2"
 ark-ff = "0.6"
 ```
 
+Needs Rust 1.83 or newer.
+
 ## Development
 
-`cargo test` runs the unit tests, the doc examples and `tests/random.rs`, which checks every
-operation against its definition on random matrices over two fields (the determinant by the
-permutation formula, `A * inverse == I`, `A * adjugate == det * I`, `L * U == A`, `A * x == b`...).
+`cargo test` runs the unit tests, the doc examples and three test files that check every operation
+by its definition on random matrices over GF(7) and GF(127), small enough for many singular cases:
+`tests/random.rs` (determinant by the permutation formula, `A * inverse == I`,
+`A * adjugate == det * I`, `L * U == A`...), `tests/naive.rs` (every naive version against its fast
+counterpart, and pinned operation counts) and `tests/algebra.rs` (row reduction, kernel, all
+solutions, Cayley-Hamilton, interpolation).
 
-`cargo bench` times the main operations; [benches/RESULTS.md](benches/RESULTS.md) keeps the
-results over time and says how to add a run.
+`benches/run.sh` runs the benchmarks under the same conditions every time (an idle machine, one
+performance core); [benches/RESULTS.md](benches/RESULTS.md) keeps the results over time and says
+how to add a run.
 
 ## License
 
