@@ -6,6 +6,39 @@ Breaking:
 - ark-ff 0.6 (was 0.4): use field types from ark-ff 0.6. In ark-ff 0.5 and later, `ZERO` comes
   from the `AdditiveGroup` trait, so code using `F::ZERO` on a concrete field type needs
   `use ark_ff::AdditiveGroup`.
+- Methods take `&self` instead of `self`: no more `a.clone().determinant()`. The operators work on
+  owned matrices and on references (`&a + &b`, `&a * &b`, `-&a`).
+- Methods that can fail return `Result<_, MatrixError>` instead of panicking:
+
+  | 0.1 | 0.2 |
+  |---|---|
+  | `Matrix::new(rows)` (panics on rows of different lengths) | `Matrix::from_rows(rows)?` |
+  | | `Matrix::new(rows, columns, entries)?` (entries row by row) |
+  | `determinant()` | `determinant()?` (`NotSquare`) |
+  | `inverse()` returning `Option` | `inverse()?` (`NotSquare`, `Singular`) |
+  | `ax_b_solve_for_x(b)` | `solve(&b)?` (`NotSquare`, `DimensionMismatch`, `Singular`) |
+  | `adjoint()` | `adjugate()?` (`NotSquare`) |
+  | `lu_decomposition()` | `lu_decomposition()?` (`NotSquare`, `ZeroPivot`) |
+  | `mul_vec(v)` | `mul_vec(&v)?` (`DimensionMismatch`) |
+  | `sum_of_matrix()` | `sum()` |
+  | `get_element(i, j)` | `get(i, j)` (`Option`) or `a[(i, j)]` |
+  | `set_element(i, j, x)` | `set(i, j, x)?` (`OutOfBounds`) or `a[(i, j)] = x` |
+  | `evaluate_*_polynomial` returning `Option` | `Result` (`Empty`, `DimensionMismatch`) |
+
+  The operators `+`, `-`, `*` still panic on sizes that don't fit.
+- Entries are stored in one `Vec`, row by row ([#1](https://github.com/EdgarBarrantes/field-matrix/issues/1)),
+  so a matrix always has a shape: `rows()` and `columns()`, also for empty ones (a 2 x 0 matrix is
+  not a 0 x 2 one).
+- The empty 0 x 0 matrix is square, with determinant 1, and is its own inverse and identity
+  (0.1 said it wasn't square).
+- `lu_decomposition` returns `ZeroPivot` only when it would divide by zero: singular matrices
+  whose last pivot is zero, such as `[[1, 2], [2, 4]]`, now have an LU decomposition (0.1 rejected
+  every singular matrix).
+- `Display` prints the entries as numbers, aligned by column (0.1 printed `BigInt([3])`).
+
+New:
+- `zeros`, `identity`, `from_fn`, `rows`, `columns`, `as_slice`, `to_rows`, indexing with
+  `a[(i, j)]`, negation, and `MatrixError` (which implements `std::error::Error`).
 
 Other:
 - Benchmarks (`cargo bench`, `benches/`) with recorded results in `benches/RESULTS.md`, so changes

@@ -25,8 +25,8 @@ don't fit: their inverse and LU need real or complex numbers.
 
 - Production or secret data: it is not constant time (it branches on the values) and it has
   not been audited.
-- Large or sparse matrices: rows are `Vec<Vec<F>>`, operations are O(n^3) (the adjugate is
-  O(n^5)), and errors panic instead of returning `Result`.
+- Large or sparse matrices: operations are O(n^3) and written for clarity (the adjugate is
+  O(n^5)); see [benches/RESULTS.md](benches/RESULTS.md) for timings.
 - Matrices over GF(2): [bitgauss](https://crates.io/crates/bitgauss) is much faster there. In
   Python, [galois](https://github.com/mhostetter/galois) and SageMath do all of this and more.
 
@@ -34,7 +34,7 @@ don't fit: their inverse and LU need real or complex numbers.
 
 ```rust
 use ark_ff::{Fp64, MontBackend};
-use field_matrix_utils::Matrix;
+use field_matrix_utils::{Matrix, MatrixError};
 
 // A prime field: the integers modulo 127. Any arkworks field works.
 #[derive(ark_ff::MontConfig)]
@@ -43,44 +43,51 @@ use field_matrix_utils::Matrix;
 pub struct F127Config;
 type F = Fp64<MontBackend<F127Config, 1>>;
 
-let a: Matrix<F> = Matrix::new(vec![
+let a: Matrix<F> = Matrix::from_rows(vec![
     vec![F::from(1), F::from(2)],
     vec![F::from(3), F::from(4)],
-]);
+])?;
 
-// Methods take the matrix by value: clone it to keep using it.
-let b = a.clone().transpose();
-let product = a.clone() * b;
-assert_eq!(product.get_element(0, 0), F::from(5));
+let product = &a * &a.transpose();
+assert_eq!(product[(0, 0)], F::from(5));
 
 // 1 * 4 - 2 * 3 = -2, that is 125 modulo 127
-assert_eq!(a.clone().determinant(), -F::from(2));
+assert_eq!(a.determinant()?, -F::from(2));
 
-let inverse = a.clone().inverse().expect("the determinant is not zero");
-assert!((a.clone() * inverse).is_identity());
+let inverse = a.inverse()?;
+assert!((&a * &inverse).is_identity());
 
 // Solve a * x = [1, 2]
-let x = a.clone().ax_b_solve_for_x(vec![F::from(1), F::from(2)]);
-assert_eq!(a.mul_vec(x), vec![F::from(1), F::from(2)]);
+let b = vec![F::from(1), F::from(2)];
+let x = a.solve(&b)?;
+assert_eq!(a.mul_vec(&x)?, b);
+
+println!("{a}"); // [1, 2]
+                 // [3, 4]
 ```
 
 ## Features
 
-- `+`, `-`, `*` between matrices, `==`, and `Display`
-- `scalar_mul`, `mul_vec` (A * v), `sum_of_matrix`, `transpose`
-- `determinant`, `inverse` (`None` when singular), `adjoint` (the adjugate)
-- `ax_b_solve_for_x` (Gaussian elimination with row exchanges) and `lu_decomposition`
-  (Doolittle, without row exchanges)
-- `is_square`, `is_diagonal`, `is_identity`, `get_element`, `set_element`
+- Construction: `new` (rows, columns, entries), `from_rows`, `zeros`, `identity`, `from_fn`
+- `+`, `-`, `*` and unary `-` on matrices and references, `==`, `Display`, `a[(i, j)]`
+- `scalar_mul`, `mul_vec` (A * v), `sum`, `transpose`, `get`, `set`
+- `determinant`, `inverse`, `adjugate`, `solve` (Gaussian elimination with row exchanges) and
+  `lu_decomposition` (Doolittle, without row exchanges)
+- `is_square`, `is_diagonal`, `is_identity`
 - `evaluate_matrix_polynomial` and `evaluate_vector_polynomial`: `M_0 + alpha * M_1 + ... +
   alpha^k * M_k`, the random linear combination proof systems use to batch checks
 
-## Upgrading from 0.1.1 or earlier
+Methods that can fail return a [`MatrixError`]; the operators panic if the sizes don't fit.
 
-Those versions gave wrong results: `ax_b_solve_for_x` returned wrong solutions, `mul_vec`
-computed v * A instead of A * v, and `adjoint` returned the transpose. They also panicked on
-valid input. Details in the
-[changelog](https://github.com/EdgarBarrantes/field-matrix/blob/master/CHANGELOG.md).
+## Upgrading from 0.1
+
+0.2 uses ark-ff 0.6, takes `&self` instead of `self` (no more `.clone()` before every call),
+returns `Result` instead of panicking, and renames a few methods: `ax_b_solve_for_x` is `solve`,
+`adjoint` is `adjugate`, `sum_of_matrix` is `sum`, `get_element` / `set_element` are `get` /
+`set`, and `Matrix::new` takes the size and the entries (`from_rows` takes rows). The full list
+is in the [changelog](https://github.com/EdgarBarrantes/field-matrix/blob/master/CHANGELOG.md).
+
+Versions 0.1.1 and earlier gave wrong results; upgrade from those in any case.
 
 ## Install
 
@@ -94,7 +101,10 @@ ark-ff = "0.6"
 
 `cargo test` runs the unit tests, the doc examples and `tests/random.rs`, which checks every
 operation against its definition on random matrices over two fields (the determinant by the
-permutation formula, `A * inverse == I`, `A * adjoint == det * I`, `A * x == b`...).
+permutation formula, `A * inverse == I`, `A * adjugate == det * I`, `L * U == A`, `A * x == b`...).
+
+`cargo bench` times the main operations; [benches/RESULTS.md](benches/RESULTS.md) keeps the
+results over time and says how to add a run.
 
 ## License
 

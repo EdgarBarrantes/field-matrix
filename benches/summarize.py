@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CRITERION = ROOT / "target" / "criterion"
-ORDER = ["multiply", "determinant", "inverse", "solve", "adjoint", "evaluate_matrix_polynomial"]
+ORDER = ["multiply", "determinant", "inverse", "solve", "adjoint", "adjugate", "evaluate_matrix_polynomial"]
 
 
 def run(*args):
