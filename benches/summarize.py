@@ -4,11 +4,15 @@
     benches/run.sh
     python3 benches/summarize.py   # prints a section for benches/RESULTS.md
 
+`python3 benches/summarize.py <baseline>` prints a saved criterion baseline instead of the latest
+run (the heading then names the current commit: edit it to the baseline's).
+
 Reads criterion's estimates (median time per operation) from target/criterion and adds what the
 numbers depend on: commit, Rust and ark-ff versions, and the CPU.
 """
 import datetime
 import json
+import sys
 import platform
 import re
 import subprocess
@@ -53,8 +57,9 @@ def human(ns):
 
 
 def main():
+    baseline = sys.argv[1] if len(sys.argv) > 1 else "new"
     results = {}
-    for estimates in CRITERION.glob("*/*/new/estimates.json"):
+    for estimates in CRITERION.glob(f"*/*/{baseline}/estimates.json"):
         group, size = estimates.parts[-4], estimates.parts[-3]
         if size.isdigit():
             median = json.loads(estimates.read_text())["median"]["point_estimate"]

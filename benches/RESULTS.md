@@ -23,6 +23,54 @@ To compare a change with the previous run directly, criterion keeps the last res
 `cargo bench -- --baseline before` reports the difference for each benchmark (pass the same
 options to `benches/run.sh`).
 
+## 2026-10-18: 6aa27d6 Naive versions, operation counting, fast adjugate, pow
+
+rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H; pinned to CPUs 1-2, governor performance, 97% idle before, other cores 97% idle during (ok). Median time per
+operation.
+
+| Operation | n = 4 | n = 8 | n = 16 | n = 64 |
+|---|---|---|---|---|
+| multiply | 1.03 µs |  | 63.8 µs | 5.44 ms |
+| determinant | 6.28 µs |  | 52 µs | 2.07 ms |
+| naive_determinant_leibniz | 1.42 µs | 5.05 ms |  |  |
+| inverse | 7.69 µs |  | 171 µs | 9.57 ms |
+| solve | 6.92 µs |  | 98.7 µs | 5.01 ms |
+| naive_solve_cramer | 33.6 µs |  | 1.37 ms |  |
+| adjugate | 14.4 µs | 42.3 µs | 241 µs |  |
+| naive_adjugate | 112 µs | 1.55 ms | 19.2 ms |  |
+| pow_64 |  |  | 550 µs |  |
+| naive_pow_64 |  |  | 5.49 ms |  |
+| evaluate_matrix_polynomial | 2.34 µs |  | 36.4 µs | 617 µs |
+
+Against the 45470c2 re-run below, under the same conditions: `adjugate` (now det * A^-1, or rank
+one when singular) is 87% faster at n = 4, 97% at n = 8 and 98.7% at n = 16 (80 times). Unchanged
+operations are within 1.5%, except the determinant at n = 16 (+3.6%) and polynomial evaluation
+(+6%), whose code only moved from `ark_ff::Field` to the `Scalar` bound: not explained yet.
+
+The naive versions: `naive_adjugate` is the old `adjugate` and times the same. The Leibniz
+determinant beats elimination at n = 4 (no inversions; four inversions in a 255-bit field cost more
+than 96 multiplications) and loses by 2,400 times at n = 8. Cramer's rule is 14 times slower than
+`solve` at n = 16; `A^64` by square-and-multiply 10 times faster than 64 multiplications.
+
+## 2026-10-18: 45470c2 0.2 API (re-run with benches/run.sh)
+
+rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H; pinned to CPUs 1-2, governor performance, 98% idle before, other cores 96% idle during (ok). Median time per
+operation.
+
+| Operation | n = 4 | n = 8 | n = 16 | n = 64 |
+|---|---|---|---|---|
+| multiply | 1.03 µs |  | 63.5 µs | 5.45 ms |
+| determinant | 6.26 µs |  | 50.3 µs | 2.06 ms |
+| inverse | 7.66 µs |  | 168 µs | 9.46 ms |
+| solve | 6.93 µs |  | 97.9 µs | 4.94 ms |
+| adjugate | 112 µs | 1.56 ms | 19.3 ms |  |
+| evaluate_matrix_polynomial | 2.21 µs |  | 34.2 µs | 580 µs |
+
+The 0.2 API code again, pinned to one performance core with the `performance` governor: the
+baseline for the step after it. Against the earlier unpinned run of the same code, timings are
+mostly 1 to 6% lower (polynomial evaluation at n = 4: 18% lower; multiply at n = 4: 4% higher), and
+much steadier (confidence intervals within about 0.5%).
+
 ## 2026-10-18: 45470c2 0.2 API: flat storage, &self, Result errors, new names
 
 rustc 1.91.1 (ed61e7d7e 2025-11-07), ark-ff 0.6.0, Intel(R) Core(TM) Ultra 7 155H. Median time per operation.
