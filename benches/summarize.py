@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Print the latest `cargo bench` results as a Markdown section for benches/RESULTS.md.
 
-    cargo bench
-    python3 benches/summarize.py >> benches/RESULTS.md   # then move the section to the top
+    benches/run.sh
+    python3 benches/summarize.py   # prints a section for benches/RESULTS.md
 
 Reads criterion's estimates (median time per operation) from target/criterion and adds what the
 numbers depend on: commit, Rust and ark-ff versions, and the CPU.
@@ -66,7 +66,10 @@ def main():
     commit = run("git", "log", "-1", "--format=%h %s")
     dirty = " (with uncommitted changes)" if run("git", "status", "--porcelain") else ""
     print(f"## {datetime.date.today()}: {commit}{dirty}\n")
-    print(f"{run('rustc', '--version')}, ark-ff {ark_ff_version()}, {cpu()}. Median time per operation.\n")
+    conditions = CRITERION / "conditions.txt"
+    how = conditions.read_text().strip() if conditions.exists() else "run without benches/run.sh"
+    print(f"{run('rustc', '--version')}, ark-ff {ark_ff_version()}, {cpu()}; {how}. Median time per")
+    print("operation.\n")
     print("| Operation | " + " | ".join(f"n = {n}" for n in sizes) + " |")
     print("|---|" + "---|" * len(sizes))
     for group in sorted(results, key=lambda g: (ORDER.index(g) if g in ORDER else len(ORDER), g)):

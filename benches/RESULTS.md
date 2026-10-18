@@ -8,16 +8,20 @@ The field is the BLS12-381 scalar field (255 bits). Inputs are fixed pseudo-rand
 (`benches/operations.rs`). The adjugate is measured only up to n = 16: it is computed from cofactors
 (about n^5 field multiplications).
 
-To add a run (on an idle machine, after committing):
+To add a run (after committing):
 
 ```
-cargo bench
+benches/run.sh                 # waits until the machine is idle, pins to one performance core
 python3 benches/summarize.py   # prints a section; paste it below this line
 ```
 
+Runs before 2026-10-18 evening were done without `benches/run.sh` (unpinned, `powersave` governor):
+compare them only with each other.
+
 To compare a change with the previous run directly, criterion keeps the last results in
 `target/criterion`: `cargo bench -- --save-baseline before`, change the code, then
-`cargo bench -- --baseline before` reports the difference for each benchmark.
+`cargo bench -- --baseline before` reports the difference for each benchmark (pass the same
+options to `benches/run.sh`).
 
 ## 2026-10-18: 45470c2 0.2 API: flat storage, &self, Result errors, new names
 
