@@ -1,9 +1,10 @@
 [package]
 name = "field-matrix-utils"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
+rust-version = "1.83"
 authors = ["Edgar Barrantes <edgar@barrantes.dev>", "Isaac Villalobos <isaacvil@gmail.com>"]
-description = "Dense matrices over arkworks finite fields: determinant, inverse, adjugate, LU and linear systems"
+description = "Dense matrices over arkworks finite fields, for learning: determinant, inverse, rank, kernel, characteristic polynomial, with naive versions and operation counting"
 repository = "https://github.com/EdgarBarrantes/field-matrix"
 documentation = "https://docs.rs/field-matrix-utils"
 readme = "README.md"
@@ -12,7 +13,14 @@ categories = ["algorithms", "data-structures", "mathematics"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-ark-ff = "0.4.1"
+ark-ff = "0.6"
 
 [lib]
 path = "src/lib.rs"
+
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "operations"
+harness = false

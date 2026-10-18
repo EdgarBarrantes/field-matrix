@@ -1,8 +1,8 @@
 //! Checks every operation against definitions on many random matrices, over a tiny field
 //! (lots of singular matrices and zero pivots) and a larger one.
 
-use ark_ff::{Field, Fp64, MontBackend};
-use field_matrix_utils::Matrix;
+use ark_ff::{AdditiveGroup, Field, Fp64, MontBackend};
+use field_matrix_utils::{Matrix, MatrixError};
 
 #[derive(ark_ff::MontConfig)]
 #[modulus = "7"]
@@ -32,18 +32,6 @@ fn random_rows<F: Field>(rng: &mut Rng, rows: usize, columns: usize) -> Vec<Vec<
     (0..rows)
         .map(|_| (0..columns).map(|_| F::from(rng.next(1000))).collect())
         .collect()
-}
-
-fn identity<F: Field>(n: usize) -> Matrix<F> {
-    Matrix::new(
-        (0..n)
-            .map(|i| {
-                (0..n)
-                    .map(|j| if i == j { F::ONE } else { F::ZERO })
-                    .collect()
-            })
-            .collect(),
-    )
 }
 
 /// Determinant by the permutation (Leibniz) formula, independent of the library.
@@ -76,6 +64,11 @@ fn leibniz<F: Field>(rows: &[Vec<F>]) -> F {
     total
 }
 
+/// The top-left k x k corner.
+fn leading_minor<F: Field>(rows: &[Vec<F>], k: usize) -> Vec<Vec<F>> {
+    rows[..k].iter().map(|row| row[..k].to_vec()).collect()
+}
+
 fn check_field<F: Field>(seed: u64, min_singular: usize) {
     let mut rng = Rng(seed);
     let (mut invertible, mut singular) = (0, 0);
@@ -83,35 +76,54 @@ fn check_field<F: Field>(seed: u64, min_singular: usize) {
     for _ in 0..400 {
         let n = 1 + rng.next(5) as usize;
         let rows = random_rows::<F>(&mut rng, n, n);
-        let a = Matrix::new(rows.clone());
+        let a = Matrix::from_rows(rows.clone()).unwrap();
         let det = leibniz(&rows);
+        let identity = Matrix::<F>::identity(n);
 
-        assert_eq!(a.clone().determinant(), det, "determinant of {rows:?}");
+        assert_eq!(a.determinant(), Ok(det), "determinant of {rows:?}");
 
         // A * adj(A) = det(A) * I, singular or not
         assert_eq!(
-            a.clone() * a.clone().adjoint(),
-            identity::<F>(n).scalar_mul(det),
-            "adjoint of {rows:?}"
+            &a * &a.adjugate().unwrap(),
+            identity.scalar_mul(det),
+            "adjugate of {rows:?}"
         );
 
-        match a.clone().inverse() {
-            Some(inverse) => {
+        // LU without row exchanges: exists exactly when no leading minor before the last is zero
+        let needs_exchange = (1..n).any(|k| leibniz(&leading_minor(&rows, k)) == F::ZERO);
+        match a.lu_decomposition() {
+            Ok((l, u)) => {
+                assert!(!needs_exchange, "LU of {rows:?}");
+                assert_eq!(&l * &u, a, "LU of {rows:?}");
+                for i in 0..n {
+                    assert_eq!(l[(i, i)], F::ONE);
+                    for j in (i + 1)..n {
+                        assert_eq!(l[(i, j)], F::ZERO);
+                        assert_eq!(u[(j, i)], F::ZERO);
+                    }
+                }
+            }
+            Err(e) => {
+                assert_eq!(e, MatrixError::ZeroPivot);
+                assert!(needs_exchange, "no LU for {rows:?}");
+            }
+        }
+
+        match a.inverse() {
+            Ok(inverse) => {
                 assert_ne!(det, F::ZERO, "inverse of singular {rows:?}");
-                assert_eq!(
-                    a.clone() * inverse.clone(),
-                    identity(n),
-                    "inverse of {rows:?}"
-                );
-                assert_eq!(inverse * a.clone(), identity(n), "inverse of {rows:?}");
+                assert_eq!(&a * &inverse, identity, "inverse of {rows:?}");
+                assert_eq!(&inverse * &a, identity, "inverse of {rows:?}");
 
                 let b: Vec<F> = (0..n).map(|_| F::from(rng.next(1000))).collect();
-                let x = a.clone().ax_b_solve_for_x(b.clone());
-                assert_eq!(a.clone().mul_vec(x), b, "solve {rows:?}");
+                let x = a.solve(&b).unwrap();
+                assert_eq!(a.mul_vec(&x), Ok(b), "solve {rows:?}");
                 invertible += 1;
             }
-            None => {
+            Err(e) => {
+                assert_eq!(e, MatrixError::Singular);
                 assert_eq!(det, F::ZERO, "no inverse for invertible {rows:?}");
+                assert_eq!(a.solve(&vec![F::ONE; n]), Err(MatrixError::Singular));
                 singular += 1;
             }
         }
@@ -142,70 +154,66 @@ fn random_rectangular_matrices() {
             1 + rng.next(4) as usize,
         );
         let rows = random_rows::<F127>(&mut rng, r, c);
-        let a = Matrix::new(rows.clone());
-        let b = Matrix::new(random_rows::<F127>(&mut rng, c, k));
+        let a = Matrix::from_rows(rows.clone()).unwrap();
+        let b = Matrix::from_rows(random_rows::<F127>(&mut rng, c, k)).unwrap();
         let v: Vec<F127> = (0..c).map(|_| F127::from(rng.next(1000))).collect();
 
         // A * v equals A times v as a one-column matrix
-        let column = Matrix::new(v.iter().map(|&x| vec![x]).collect());
-        let product = a.clone() * column;
-        let as_matrix: Vec<F127> = (0..r).map(|i| product.get_element(i, 0)).collect();
-        assert_eq!(a.clone().mul_vec(v), as_matrix);
+        let column = Matrix::new(c, 1, v.clone()).unwrap();
+        assert_eq!(a.mul_vec(&v).unwrap(), (&a * &column).as_slice());
 
         // (AB)^T = B^T A^T
-        assert_eq!(
-            (a.clone() * b.clone()).transpose(),
-            b.transpose() * a.clone().transpose()
-        );
+        assert_eq!((&a * &b).transpose(), &b.transpose() * &a.transpose());
+
+        // the flat and the row-by-row views agree
+        assert_eq!(a.to_rows(), rows);
+        assert_eq!(Matrix::new(r, c, a.as_slice().to_vec()), Ok(a.clone()));
+        for (i, row) in rows.iter().enumerate() {
+            for (j, &x) in row.iter().enumerate() {
+                assert_eq!(a[(i, j)], x);
+                assert_eq!(a.get(i, j), Some(x));
+            }
+        }
 
         // scalar multiplication and equality on non-square matrices
         let three = F127::from(3u64);
-        let tripled = Matrix::new(
-            rows.iter()
-                .map(|row| row.iter().map(|&x| x * three).collect())
-                .collect(),
-        );
-        assert_eq!(a.clone().scalar_mul(three), tripled);
-        assert_eq!(a.clone() + a.clone() + a.clone(), tripled);
-        assert_eq!(tripled.clone() - a.clone(), a.clone() + a.clone());
+        let tripled = Matrix::from_fn(r, c, |i, j| rows[i][j] * three);
+        assert_eq!(a.scalar_mul(three), tripled);
+        assert_eq!(&(&a + &a) + &a, tripled);
+        assert_eq!(&tripled - &a, &a + &a);
+        assert_eq!(-&a + &a, Matrix::zeros(r, c));
         assert!(a == a.clone());
+
+        // operations that need a square matrix say so
+        if r != c {
+            assert_eq!(a.determinant(), Err(MatrixError::NotSquare));
+            assert_eq!(a.inverse(), Err(MatrixError::NotSquare));
+            assert_eq!(a.adjugate(), Err(MatrixError::NotSquare));
+        }
     }
 }
 
 #[test]
 fn row_exchanges() {
     type F = F127;
-    let swap = Matrix::new(vec![vec![F::ZERO, F::ONE], vec![F::ONE, F::ZERO]]);
-    assert_eq!(swap.clone().inverse(), Some(swap.clone()));
+    let swap = Matrix::from_rows(vec![vec![F::ZERO, F::ONE], vec![F::ONE, F::ZERO]]).unwrap();
+    assert_eq!(swap.inverse(), Ok(swap.clone()));
     assert_eq!(
-        swap.ax_b_solve_for_x(vec![F::from(5u64), F::from(9u64)]),
-        vec![F::from(9u64), F::from(5u64)]
+        swap.solve(&[F::from(5u64), F::from(9u64)]),
+        Ok(vec![F::from(9u64), F::from(5u64)])
     );
 }
 
 #[test]
 fn shapes() {
     type F = F127;
-    let small = Matrix::new(vec![vec![F::ONE, F::ZERO], vec![F::ZERO, F::ONE]]);
-    let mut big = identity::<F>(3);
-    big.set_element(2, 2, F::from(9u64));
+    let small = Matrix::<F>::identity(2);
+    let mut big = Matrix::<F>::identity(3);
+    big[(2, 2)] = F::from(9u64);
     assert!(small != big);
-    assert!(!Matrix::<F>::new(vec![]).is_square());
-    assert_eq!(Matrix::<F>::new(vec![]).transpose(), Matrix::new(vec![]));
-}
-
-#[test]
-#[should_panic(expected = "Rows have different lengths")]
-fn ragged_rows() {
-    Matrix::<F127>::new(vec![vec![F127::ONE, F127::ONE], vec![F127::ONE]]);
-}
-
-#[test]
-#[should_panic(expected = "without row exchanges")]
-fn lu_needs_row_exchanges() {
-    let swap = Matrix::new(vec![
-        vec![F127::ZERO, F127::ONE],
-        vec![F127::ONE, F127::ZERO],
-    ]);
-    swap.lu_decomposition();
+    // same entries, different shapes
+    assert_ne!(
+        Matrix::new(1, 4, vec![F::ONE; 4]).unwrap(),
+        Matrix::new(2, 2, vec![F::ONE; 4]).unwrap()
+    );
 }

@@ -4,15 +4,16 @@
 //! checking every `M_i`, they check `M_0 + alpha * M_1 + ... + alpha^k * M_k` for a random
 //! challenge `alpha`. That is the polynomial `M_0 + M_1 x + ... + M_k x^k` evaluated at
 //! `x = alpha`, which these functions compute with Horner's rule (`k` scalar multiplications).
+//!
+//! Also plain polynomials with field coefficients: [`evaluate_polynomial`], and [`interpolate`],
+//! which finds the polynomial through given points by solving a system with the
+//! [`Matrix::vandermonde`] matrix. Coefficients always go from the constant term up.
 
-use ark_ff::Field;
-
-use crate::Matrix;
+use crate::scalar::Scalar;
+use crate::{Matrix, MatrixError};
 
 /// Evaluates `M_0 + M_1 x + ... + M_k x^k` at `x = alpha`, where `coefficients` is
 /// `[M_0, M_1, ..., M_k]`.
-///
-/// Returns `None` if `coefficients` is empty.
 /// ## Example
 /// ```
 /// # use ark_ff::{Fp64, MontBackend};
@@ -24,34 +25,35 @@ use crate::Matrix;
 /// # type F = Fp64<MontBackend<F127Config, 1>>;
 /// use field_matrix_utils::evaluate_matrix_polynomial;
 ///
-/// let identity: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(0)], vec![F::from(0), F::from(1)]]);
-/// let ones: Matrix<F> = Matrix::new(vec![vec![F::from(1), F::from(1)], vec![F::from(1), F::from(1)]]);
+/// let identity: Matrix<F> = Matrix::identity(2);
+/// let ones: Matrix<F> = Matrix::from_fn(2, 2, |_, _| F::from(1));
 ///
 /// // I + 3 * ones
 /// let result = evaluate_matrix_polynomial(&[identity, ones], F::from(3)).unwrap();
-/// assert_eq!(
-///     result,
-///     Matrix::new(vec![vec![F::from(4), F::from(3)], vec![F::from(3), F::from(4)]])
-/// );
+/// assert_eq!(result, Matrix::from_rows(vec![vec![F::from(4), F::from(3)], vec![F::from(3), F::from(4)]]).unwrap());
 /// ```
-/// ## Panics
-/// Panics if the matrices don't all have the same size.
-pub fn evaluate_matrix_polynomial<F: Field>(
+/// ## Errors
+/// [`MatrixError::Empty`] if there are no coefficients; [`MatrixError::DimensionMismatch`] if the
+/// matrices don't all have the same size.
+pub fn evaluate_matrix_polynomial<F: Scalar>(
     coefficients: &[Matrix<F>],
     alpha: F,
-) -> Option<Matrix<F>> {
-    let (last, rest) = coefficients.split_last()?;
-    Some(
-        rest.iter()
-            .rev()
-            .fold(last.clone(), |acc, c| acc.scalar_mul(alpha) + c.clone()),
-    )
+) -> Result<Matrix<F>, MatrixError> {
+    let (last, rest) = coefficients.split_last().ok_or(MatrixError::Empty)?;
+    if rest
+        .iter()
+        .any(|c| (c.rows(), c.columns()) != (last.rows(), last.columns()))
+    {
+        return Err(MatrixError::DimensionMismatch);
+    }
+    Ok(rest
+        .iter()
+        .rev()
+        .fold(last.clone(), |acc, c| &acc.scalar_mul(alpha) + c))
 }
 
 /// Evaluates `v_0 + v_1 x + ... + v_k x^k` at `x = alpha`, where `coefficients` is
 /// `[v_0, v_1, ..., v_k]`.
-///
-/// Returns `None` if `coefficients` is empty.
 /// ## Example
 /// ```
 /// # use ark_ff::{Fp64, MontBackend};
@@ -69,20 +71,107 @@ pub fn evaluate_matrix_polynomial<F: Field>(
 /// let result = evaluate_vector_polynomial(&[v0, v1], F::from(2)).unwrap();
 /// assert_eq!(result, vec![F::from(21), F::from(42)]);
 /// ```
-/// ## Panics
-/// Panics if the vectors don't all have the same length.
-pub fn evaluate_vector_polynomial<F: Field>(coefficients: &[Vec<F>], alpha: F) -> Option<Vec<F>> {
-    let (last, rest) = coefficients.split_last()?;
-    Some(rest.iter().rev().fold(last.clone(), |acc, c| {
-        assert_eq!(acc.len(), c.len(), "Vectors have different lengths");
+/// ## Errors
+/// [`MatrixError::Empty`] if there are no coefficients; [`MatrixError::DimensionMismatch`] if the
+/// vectors don't all have the same length.
+pub fn evaluate_vector_polynomial<F: Scalar>(
+    coefficients: &[Vec<F>],
+    alpha: F,
+) -> Result<Vec<F>, MatrixError> {
+    let (last, rest) = coefficients.split_last().ok_or(MatrixError::Empty)?;
+    if rest.iter().any(|c| c.len() != last.len()) {
+        return Err(MatrixError::DimensionMismatch);
+    }
+    Ok(rest.iter().rev().fold(last.clone(), |acc, c| {
         acc.iter().zip(c).map(|(&a, &b)| a * alpha + b).collect()
     }))
 }
 
+/// Evaluates `c_0 + c_1 x + ... + c_k x^k` at `x`, by Horner's rule; `coefficients` is
+/// `[c_0, c_1, ..., c_k]` (an empty list is the zero polynomial).
+/// ## Example
+/// ```
+/// # use ark_ff::{Fp64, MontBackend};
+/// # #[derive(ark_ff::MontConfig)]
+/// # #[modulus = "127"]
+/// # #[generator = "6"]
+/// # pub struct F127Config;
+/// # type F = Fp64<MontBackend<F127Config, 1>>;
+/// use field_matrix_utils::polynomial::evaluate_polynomial;
+///
+/// // 1 + 2x + 3x^2 at x = 2
+/// let p = [F::from(1), F::from(2), F::from(3)];
+/// assert_eq!(evaluate_polynomial(&p, F::from(2)), F::from(17));
+/// ```
+pub fn evaluate_polynomial<F: Scalar>(coefficients: &[F], x: F) -> F {
+    coefficients
+        .iter()
+        .rev()
+        .fold(F::ZERO_ELEMENT, |acc, &c| acc * x + c)
+}
+
+/// The polynomial of degree below `n` through the `n` points `(xs[i], ys[i])`, as coefficients from
+/// the constant term up: the solution of `V c = ys` with `V` the [Vandermonde
+/// matrix](Matrix::vandermonde) of `xs` (about n^3 multiplications; Lagrange or Newton
+/// interpolation would take about n^2).
+/// ## Example
+/// ```
+/// # use ark_ff::{Fp64, MontBackend};
+/// # #[derive(ark_ff::MontConfig)]
+/// # #[modulus = "127"]
+/// # #[generator = "6"]
+/// # pub struct F127Config;
+/// # type F = Fp64<MontBackend<F127Config, 1>>;
+/// use field_matrix_utils::polynomial::{evaluate_polynomial, interpolate};
+///
+/// // The line through (1, 3) and (2, 5): 1 + 2x
+/// let p = interpolate(&[F::from(1), F::from(2)], &[F::from(3), F::from(5)]).unwrap();
+/// assert_eq!(p, vec![F::from(1), F::from(2)]);
+/// assert_eq!(evaluate_polynomial(&p, F::from(10)), F::from(21));
+/// ```
+/// ## Errors
+/// [`MatrixError::DimensionMismatch`] if `xs` and `ys` have different lengths;
+/// [`MatrixError::Singular`] if two points share the same `x`.
+pub fn interpolate<F: Scalar>(xs: &[F], ys: &[F]) -> Result<Vec<F>, MatrixError> {
+    if xs.len() != ys.len() {
+        return Err(MatrixError::DimensionMismatch);
+    }
+    Matrix::vandermonde(xs).solve(ys)
+}
+
+impl<F: Scalar> Matrix<F> {
+    /// The square Vandermonde matrix of `points`: row `i` is `1, x_i, x_i^2, ..., x_i^(n-1)`.
+    /// Multiplying it by a polynomial's coefficients evaluates the polynomial at every point; it is
+    /// invertible exactly when the points are distinct.
+    /// ## Example
+    /// ```
+    /// # use ark_ff::{Fp64, MontBackend};
+    /// # use field_matrix_utils::Matrix;
+    /// # #[derive(ark_ff::MontConfig)]
+    /// # #[modulus = "127"]
+    /// # #[generator = "6"]
+    /// # pub struct F127Config;
+    /// # type F = Fp64<MontBackend<F127Config, 1>>;
+    /// let v: Matrix<F> = Matrix::vandermonde(&[F::from(2), F::from(3)]);
+    /// assert_eq!(v, Matrix::from_rows(vec![vec![F::from(1), F::from(2)], vec![F::from(1), F::from(3)]]).unwrap());
+    /// ```
+    pub fn vandermonde(points: &[F]) -> Matrix<F> {
+        let n = points.len();
+        let mut v = Matrix::zeros(n, n);
+        for (i, &x) in points.iter().enumerate() {
+            let mut power = F::ONE_ELEMENT;
+            for j in 0..n {
+                v[(i, j)] = power;
+                power *= x;
+            }
+        }
+        v
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ff::{Fp64, MontBackend};
+    use ark_ff::{AdditiveGroup, Field, Fp64, MontBackend};
 
     #[derive(ark_ff::MontConfig)]
     #[modulus = "127"]
@@ -102,11 +191,7 @@ mod tests {
     }
 
     fn random_matrix(rng: &mut Rng, rows: usize, columns: usize) -> Matrix<F> {
-        Matrix::new(
-            (0..rows)
-                .map(|_| (0..columns).map(|_| rng.next()).collect())
-                .collect(),
-        )
+        Matrix::from_fn(rows, columns, |_, _| rng.next())
     }
 
     #[test]
@@ -117,16 +202,16 @@ mod tests {
                 (0..k).map(|_| random_matrix(&mut rng, 2, 3)).collect();
             let alpha = rng.next();
 
-            let mut expected = coefficients[0].clone().scalar_mul(F::ZERO);
+            let mut expected = Matrix::zeros(2, 3);
             let mut power = F::ONE;
             for c in &coefficients {
-                expected = expected + c.clone().scalar_mul(power);
+                expected = &expected + &c.scalar_mul(power);
                 power *= alpha;
             }
 
             assert_eq!(
                 evaluate_matrix_polynomial(&coefficients, alpha),
-                Some(expected)
+                Ok(expected)
             );
         }
     }
@@ -151,7 +236,7 @@ mod tests {
 
             assert_eq!(
                 evaluate_vector_polynomial(&coefficients, alpha),
-                Some(expected)
+                Ok(expected)
             );
         }
     }
@@ -159,37 +244,36 @@ mod tests {
     #[test]
     fn special_points() {
         let mut rng = Rng(0x1234_5678_9abc_def1);
-        let coefficients: Vec<Matrix<F>> = (0..3).map(|_| random_matrix(&mut rng, 2, 2)).collect();
+        let c: Vec<Matrix<F>> = (0..3).map(|_| random_matrix(&mut rng, 2, 2)).collect();
 
         // at 0 only the constant term is left; at 1 it is the plain sum
+        assert_eq!(evaluate_matrix_polynomial(&c, F::ZERO), Ok(c[0].clone()));
         assert_eq!(
-            evaluate_matrix_polynomial(&coefficients, F::ZERO),
-            Some(coefficients[0].clone())
-        );
-        assert_eq!(
-            evaluate_matrix_polynomial(&coefficients, F::ONE),
-            Some(coefficients[0].clone() + coefficients[1].clone() + coefficients[2].clone())
+            evaluate_matrix_polynomial(&c, F::ONE),
+            Ok(&(&c[0] + &c[1]) + &c[2])
         );
     }
 
     #[test]
-    fn empty_is_none() {
-        assert_eq!(evaluate_matrix_polynomial::<F>(&[], F::ONE), None);
-        assert_eq!(evaluate_vector_polynomial::<F>(&[], F::ONE), None);
-    }
-
-    #[test]
-    #[should_panic(expected = "Vectors have different lengths")]
-    fn vectors_of_different_lengths() {
-        evaluate_vector_polynomial(&[vec![F::ONE], vec![F::ONE, F::ONE]], F::ONE);
-    }
-
-    #[test]
-    #[should_panic(expected = "different number of rows")]
-    fn matrices_of_different_sizes() {
+    fn empty_and_mismatched() {
+        assert_eq!(
+            evaluate_matrix_polynomial::<F>(&[], F::ONE),
+            Err(MatrixError::Empty)
+        );
+        assert_eq!(
+            evaluate_vector_polynomial::<F>(&[], F::ONE),
+            Err(MatrixError::Empty)
+        );
+        assert_eq!(
+            evaluate_vector_polynomial(&[vec![F::ONE], vec![F::ONE, F::ONE]], F::ONE),
+            Err(MatrixError::DimensionMismatch)
+        );
         let mut rng = Rng(7);
         let small = random_matrix(&mut rng, 2, 2);
-        let big = random_matrix(&mut rng, 3, 2);
-        evaluate_matrix_polynomial(&[small, big], F::ONE);
+        let tall = random_matrix(&mut rng, 3, 2);
+        assert_eq!(
+            evaluate_matrix_polynomial(&[small, tall], F::ONE),
+            Err(MatrixError::DimensionMismatch)
+        );
     }
 }
